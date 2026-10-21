@@ -2,7 +2,7 @@
 
 > **dsh-off-the-record** keeps your sessions, secrets, and searches off DeepSeek's record.
 
-**Status: 0.4.0.** Disable telemetry, private search, the secrets vault, and status checks are ready; the settings page is in progress.
+**Status: 0.4.1.** Disable telemetry, private search, the secrets vault, and status checks are ready; the settings page is in progress.
 
 A bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) with three parts, each of which can be turned off on its own:
 
@@ -17,13 +17,13 @@ The harness still keeps your session log on your machine, and the model provider
 Tested with DSH `0.2.1-rc.2`. The bundle also loads on later releases; when a release changes a row it manages, that override is skipped with a startup warning (`patch: entry … not found`) until the bundle is updated.
 
 ```sh
-dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.4.0
+dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.4.1
 ```
 
 Desktop users install with the `dsh` command that Desktop sets up (**Manage dsh Command… → Install**), into the Desktop profile:
 
 ```sh
-dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.4.0
+dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.4.1
 ```
 
 Watch the first start after installing or upgrading either the harness or this bundle. If the harness cannot load the bundle at all, it prints `dsh: skipping profile bundle "dsh-off-the-record"` and starts with every channel back on.

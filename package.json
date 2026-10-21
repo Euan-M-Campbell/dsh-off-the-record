@@ -1,7 +1,7 @@
 {
   "name": "dsh-off-the-record",
   "description": "Keeps your DeepSeek Harness sessions, secrets, and searches off DeepSeek's record",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "license": "MIT",
   "type": "module",
