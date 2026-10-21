@@ -2,7 +2,7 @@
 
 > **dsh-off-the-record** keeps your sessions, secrets, and searches off DeepSeek's record.
 
-**Status: 0.2.0.** Disable telemetry and private search are ready; the settings page and the secrets vault are in progress.
+**Status: 0.3.0.** Disable telemetry, private search, and status checks are ready; the secrets vault and the settings page are in progress.
 
 A bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) with three parts, each of which can be turned off on its own:
 
@@ -17,13 +17,13 @@ The harness still keeps your session log on your machine, and the model provider
 Tested with DSH `0.2.1-rc.2`. The bundle also loads on later releases; when a release changes a row it manages, that override is skipped with a startup warning (`patch: entry … not found`) until the bundle is updated.
 
 ```sh
-dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.2.0
+dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.3.0
 ```
 
 Desktop users install with the `dsh` command that Desktop sets up (**Manage dsh Command… → Install**), into the Desktop profile:
 
 ```sh
-dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.2.0
+dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.3.0
 ```
 
 Watch the first start after installing or upgrading either the harness or this bundle. If the harness cannot load the bundle at all, it prints `dsh: skipping profile bundle "dsh-off-the-record"` and starts with every channel back on.
@@ -146,6 +146,18 @@ Brave Search's API needs a key, and a card on file even for the free monthly cre
    ```
 
 The key is sent only to `api.search.brave.com`; the endpoint cannot be changed.
+
+## Status checks
+
+At every start, and whenever the configuration changes, the bundle checks each setting it manages. If something has turned a channel back on, it prints a warning that names the file responsible and how to undo it:
+
+```text
+dsh-off-the-record: Session log on DeepSeek requests is on (set in /Users/you/.dsh/profiles/web/cordis.patch.yml). Remove the "session-log-deepseek" entry from /Users/you/.dsh/profiles/web/cordis.patch.yml to turn it off again.
+```
+
+It also warns when a harness release has renamed a setting the bundle manages, and when `web_search` points at a DeepSeek provider. When everything is as the bundle sets it, it prints nothing.
+
+A settings page that shows the same status is planned.
 
 ## Develop
 

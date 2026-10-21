@@ -36,13 +36,15 @@ export function writePatch(yaml: string): string {
 }
 
 export interface TaskOptions {
-  /** Install this checkout into the profile with `dsh plugin add` before the run. */
-  readonly bundle?: boolean
+  /** Install the bundle with `dsh plugin add` before the run: `true` for this checkout, or an install spec such as a GitHub tag. */
+  readonly bundle?: boolean | string
   readonly task?: string
   /** OTLP logs endpoint; defaults to a dead local port so nothing reaches DeepSeek's collector. */
   readonly otlpUrl?: string
   /** Mock model script; defaults to one successful reply. */
   readonly model?: Partial<MockLlmServerOptions>
+  /** Receives the task run's stdout and stderr. */
+  readonly onOutput?: (output: { readonly stdout: string; readonly stderr: string }) => void
 }
 
 /**
@@ -68,8 +70,11 @@ export async function runTask(patches: readonly string[], options: TaskOptions =
     },
   })
   try {
-    if (options.bundle === true) await run(['plugin', '--profile', 'headless', 'add', root])
-    await run(['--profile', 'headless', ...patches.flatMap(patch => ['--patch', patch]), options.task ?? 'Reply with the word done.'])
+    if (options.bundle !== undefined && options.bundle !== false) {
+      await run(['plugin', '--profile', 'headless', 'add', options.bundle === true ? root : options.bundle])
+    }
+    const output = await run(['--profile', 'headless', ...patches.flatMap(patch => ['--patch', patch]), options.task ?? 'Reply with the word done.'])
+    options.onOutput?.(output)
     return [...server.requests]
   } finally {
     await server.close()

@@ -49,3 +49,19 @@ describe('disable telemetry, booted', { timeout: 300_000 }, () => {
     expect(sent).not.toContain('dsh_plugin_packages')
   })
 })
+
+describe('Off the Record status, booted', { timeout: 300_000 }, () => {
+  it('starts quietly when every managed row is as the bundle sets it', async () => {
+    let stderr = ''
+    await runTask([], { bundle: true, onOutput: (output) => { stderr = output.stderr } })
+    expect(stderr).not.toContain('dsh-off-the-record:')
+    expect(stderr).not.toContain('did not activate')
+  })
+
+  it('warns about a channel a later layer turned back on, naming the layer', async () => {
+    let stderr = ''
+    const reenable = writePatch('- id: session-log-deepseek\n  config:\n    enabled: true\n')
+    await runTask([reenable], { bundle: true, onOutput: (output) => { stderr = output.stderr } })
+    expect(stderr).toContain('dsh-off-the-record: Session log on DeepSeek requests is on (set in a --patch overlay)')
+  })
+})

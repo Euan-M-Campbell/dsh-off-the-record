@@ -1,0 +1,7 @@
+# Off the Record status: checks every row the other patches manage, at startup
+# and after each change, and logs a warning with the fix when one differs.
+# Mounted from the bare package name: the harness attaches a package's
+# settings page only to that row.
+- insert:
+    - id: otr-settings
+      name: 'dsh-off-the-record'
