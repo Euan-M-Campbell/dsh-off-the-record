@@ -67,18 +67,23 @@ const printEverywhere = windows
       'Write-Output "raw:$env:DB_PASSWORD"',
       '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($env:DB_PASSWORD))',
       '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("admin:$env:DB_PASSWORD"))',
-      'node -e "const v = process.env.DB_PASSWORD; console.log(JSON.stringify({ v }), encodeURIComponent(v), Buffer.from(v).toString(\'base64url\'))"',
+      'node print.cjs',
     ].join('; ')
   : [
       'printf "raw:%s\\n" "$DB_PASSWORD"',
       'printf "%s" "$DB_PASSWORD" | base64',
       'printf "admin:%s" "$DB_PASSWORD" | base64',
-      'node -e \'const v = process.env.DB_PASSWORD; console.log(JSON.stringify({ v }), encodeURIComponent(v), Buffer.from(v).toString("base64url"))\'',
+      'node print.cjs',
     ].join('; ')
+
+/** Prints the JSON-escaped, URL-encoded, and base64url forms; a file avoids shell quoting differences. */
+function writePrinter(home: string): void {
+  writeFileSync(join(home, 'print.cjs'), 'const v = process.env.DB_PASSWORD\nconsole.log(JSON.stringify({ v }), encodeURIComponent(v), Buffer.from(v).toString("base64url"))\n')
+}
 
 describe('secrets vault, booted', { timeout: 300_000 }, () => {
   it('passes the secret to the command and keeps every form of it out of model requests and the session log', async () => {
-    const { requests, files } = await run(true, 'run_with_secrets', { description: 'Print the password', command: printEverywhere, secrets: ['DB_PASSWORD'] })
+    const { requests, files } = await run(true, 'run_with_secrets', { description: 'Print the password', command: printEverywhere, secrets: ['DB_PASSWORD'] }, writePrinter)
     const sent = JSON.stringify(requests.map(request => request.body))
     expect(sent).toContain('raw:[secret:DB_PASSWORD]')
     expect(sent.match(/\[secret:DB_PASSWORD\]/g)?.length).toBeGreaterThanOrEqual(5)
