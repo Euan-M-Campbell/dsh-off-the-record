@@ -75,13 +75,13 @@ const printEverywhere = windows
       'Write-Output "raw:$env:DB_PASSWORD"',
       '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($env:DB_PASSWORD))',
       '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("admin:$env:DB_PASSWORD"))',
-      'node print.cjs',
+      `& '${process.execPath}' print.cjs`,
     ].join('; ')
   : [
       'printf "raw:%s\\n" "$DB_PASSWORD"',
       'printf "%s" "$DB_PASSWORD" | base64',
       'printf "admin:%s" "$DB_PASSWORD" | base64',
-      'node print.cjs',
+      `'${process.execPath}' print.cjs`,
     ].join('; ')
 
 /** Prints the JSON-escaped, URL-encoded, and base64url forms; a file avoids shell quoting differences. */
