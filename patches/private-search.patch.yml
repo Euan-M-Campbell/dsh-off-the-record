@@ -1,1 +1,28 @@
-[]
+# Private search: web searches go to your SearXNG instance (or Brave, if you
+# choose it), never to DeepSeek. Page fetches keep the shipped http provider,
+# which connects directly from this machine to the website.
+
+- insert:
+    # Set baseURL to your instance, for example http://127.0.0.1:8888. Until
+    # then web_search fails with a "not set up" error instead of searching.
+    - id: otr-web-search-searxng
+      name: 'dsh-off-the-record/web-search-searxng'
+    # Reads its key from the BRAVE_API_KEY credential. Select it with
+    # web.searchProvider: brave.
+    - id: otr-web-search-brave
+      name: 'dsh-off-the-record/web-search-brave'
+
+# Both keys restated: the row ships exactly these two.
+- id: web
+  config:
+    searchProvider: searxng
+    fetchProvider: http
+
+# With both DeepSeek web rows disabled no deepseek-* provider is registered, so
+# even a stale selection saved by the Web search settings card fails with
+# WEB_PROVIDER_CONFIGURED_MISSING instead of reaching DeepSeek.
+- id: web-search-deepseek
+  disabled: true
+
+- id: web-deepseek-api
+  disabled: true

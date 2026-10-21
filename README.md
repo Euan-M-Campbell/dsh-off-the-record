@@ -2,7 +2,7 @@
 
 > **dsh-off-the-record** keeps your sessions, secrets, and searches off DeepSeek's record.
 
-**Status: 0.1.0.** Disable telemetry is ready; private search and the secrets vault are in progress.
+**Status: 0.2.0.** Disable telemetry and private search are ready; the settings page and the secrets vault are in progress.
 
 A bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) with three parts, each of which can be turned off on its own:
 
@@ -17,13 +17,13 @@ The harness still keeps your session log on your machine, and the model provider
 Tested with DSH `0.2.1-rc.2`. The bundle also loads on later releases; when a release changes a row it manages, that override is skipped with a startup warning (`patch: entry … not found`) until the bundle is updated.
 
 ```sh
-dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.1.0
+dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.2.0
 ```
 
 Desktop users install with the `dsh` command that Desktop sets up (**Manage dsh Command… → Install**), into the Desktop profile:
 
 ```sh
-dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.1.0
+dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.2.0
 ```
 
 Watch the first start after installing or upgrading either the harness or this bundle. If the harness cannot load the bundle at all, it prints `dsh: skipping profile bundle "dsh-off-the-record"` and starts with every channel back on.
@@ -84,6 +84,68 @@ Add the row to your profile's `cordis.patch.yml` (`~/.dsh/profiles/<name>/cordis
     enabled: true
     appVersion: !!js process.env.DSH_CLIENT_VERSION
 ```
+
+## Private search
+
+`web_search` goes to your own SearXNG instance by default, or to Brave if you choose it. It never goes to DeepSeek: the bundle disables both DeepSeek web providers, so even a DeepSeek selection left in your settings fails with an error instead of searching. `web_fetch` keeps the harness's direct provider, which connects from your computer to the website.
+
+Until you configure an instance, `web_search` fails with a "not set up" error, and the model tells you search is unavailable.
+
+Your search engine sees your queries: SearXNG passes them on to the engines it uses, and Brave receives them directly.
+
+### SearXNG
+
+1. Run an instance. With Docker:
+
+   ```sh
+   docker run -d --name searxng -p 127.0.0.1:8888:8080 searxng/searxng
+   ```
+
+2. Turn on JSON output: in the instance's `settings.yml`, add `json` to `search.formats`, then restart it. Without it, every search fails with HTTP 403 and an error that says so.
+
+   ```yaml
+   search:
+     formats:
+       - html
+       - json
+   ```
+
+3. Point the bundle at it in your profile's `cordis.patch.yml`:
+
+   ```yaml
+   - id: otr-web-search-searxng
+     config:
+       baseURL: http://127.0.0.1:8888
+   ```
+
+Plain `http` is accepted only for this machine and private networks (`localhost`, `10.x`, `192.168.x`, `*.local`, Docker service names); anything else must use `https`. The URL is read only from configuration, never from environment variables, so a project's `.env` cannot redirect your searches.
+
+Optional settings on the same row: `engines` and `categories` (comma-separated SearXNG names), `searchTimeoutMs` (default 15000), and `userAgent`.
+
+### Brave
+
+Brave Search's API needs a key, and a card on file even for the free monthly credit ([pricing](https://brave.com/search/api/)).
+
+1. Store the key under the name `BRAVE_API_KEY`, in either place:
+   - `~/.dsh/.credentials.yaml`, which only your OS user can read:
+
+     ```yaml
+     refs:
+       BRAVE_API_KEY: <your key>
+     ```
+
+   - your environment when you start `dsh`.
+
+2. Select Brave in your profile's `cordis.patch.yml`:
+
+   ```yaml
+   - id: web
+     config:
+       searchProvider: brave
+       fetchProvider: http
+   ```
+
+The key is sent only to `api.search.brave.com`; the endpoint cannot be changed.
 
 ## Develop
 

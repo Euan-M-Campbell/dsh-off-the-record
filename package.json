@@ -1,7 +1,7 @@
 {
   "name": "dsh-off-the-record",
   "description": "Keeps your DeepSeek Harness sessions, secrets, and searches off DeepSeek's record",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -11,6 +11,14 @@
     "dsh": ">=0.2.1-rc.2"
   },
   "exports": {
+    "./web-search-searxng": {
+      "types": "./lib/types/web-search-searxng/index.d.ts",
+      "default": "./lib/web-search-searxng/index.js"
+    },
+    "./web-search-brave": {
+      "types": "./lib/types/web-search-brave/index.d.ts",
+      "default": "./lib/web-search-brave/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -32,12 +40,23 @@
     "lint": "oxlint",
     "test": "vitest run --passWithNoTests"
   },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-credentials": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-web": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "3.18.5"
+  },
   "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
     "@deepseek-ai/cordis-plugin-include": "1.0.10",
+    "@deepseek-ai/cordis-plugin-loader": "1.0.6",
     "@deepseek-ai/dsh": "0.2.1-rc.2",
     "@deepseek-ai/dsh-base": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-credentials": "0.2.1-rc.2",
     "@deepseek-ai/dsh-llm-mock-server": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-web": "0.2.1-rc.2",
     "@deepseek-ai/dsh-web-app": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "3.18.5",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.20.1",
     "js-yaml": "^4.3.2",
