@@ -17,13 +17,13 @@ The harness still keeps your session log on your machine, and the model provider
 Tested with DSH `0.2.1-rc.2`. The bundle also loads on later releases; when a release changes a row it manages, that override is skipped with a startup warning (`patch: entry … not found`) until the bundle is updated.
 
 ```sh
-dsh plugin --profile <name> add github:<owner>/dsh-off-the-record#v0.1.0
+dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.1.0
 ```
 
 Desktop users install with the `dsh` command that Desktop sets up (**Manage dsh Command… → Install**), into the Desktop profile:
 
 ```sh
-dsh plugin --profile desktop add github:<owner>/dsh-off-the-record#v0.1.0
+dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.1.0
 ```
 
 Watch the first start after installing or upgrading either the harness or this bundle. If the harness cannot load the bundle at all, it prints `dsh: skipping profile bundle "dsh-off-the-record"` and starts with every channel back on.
