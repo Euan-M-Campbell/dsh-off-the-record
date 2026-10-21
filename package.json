@@ -2,7 +2,25 @@
   "name": "dsh-off-the-record",
   "description": "Keeps your DeepSeek Harness sessions, secrets, and searches off DeepSeek's record",
   "version": "0.5.0",
-  "private": true,
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-bundle",
+    "privacy",
+    "telemetry",
+    "searxng",
+    "brave-search",
+    "secrets"
+  ],
+  "author": "Euan-M-Campbell (https://github.com/Euan-M-Campbell)",
+  "homepage": "https://github.com/Euan-M-Campbell/dsh-off-the-record#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Euan-M-Campbell/dsh-off-the-record.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Euan-M-Campbell/dsh-off-the-record/issues"
+  },
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.28.5",
@@ -66,7 +84,8 @@
     "build": "node scripts/build.ts",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "oxlint",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "prepublishOnly": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
