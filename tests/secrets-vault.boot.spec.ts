@@ -75,7 +75,10 @@ const printEverywhere = windows
       'Write-Output "raw:$env:DB_PASSWORD"',
       '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($env:DB_PASSWORD))',
       '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("admin:$env:DB_PASSWORD"))',
-      `& '${process.execPath}' print.cjs`,
+      // Node's output does not come back from inside the Windows sandbox, so PowerShell makes these forms.
+      'ConvertTo-Json -Compress @{ v = $env:DB_PASSWORD }',
+      '[uri]::EscapeDataString($env:DB_PASSWORD)',
+      "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($env:DB_PASSWORD)).TrimEnd('=').Replace('+', '-').Replace('/', '_')",
     ].join('; ')
   : [
       'printf "raw:%s\\n" "$DB_PASSWORD"',
