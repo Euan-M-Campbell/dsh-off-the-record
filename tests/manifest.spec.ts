@@ -32,7 +32,8 @@ describe('bundle manifest', () => {
   const exportKey = (plugin: string): string => plugin === 'otr-settings' ? '.' : `./${plugin}`
 
   it('exports every plugin directory from its built entry', () => {
-    const plugins = globSync('src/*/index.ts', { cwd: root }).map(file => basename(dirname(file)))
+    // src/client is the browser half, exported as ./client.
+    const plugins = globSync('src/*/index.ts', { cwd: root }).map(file => basename(dirname(file))).filter(plugin => plugin !== 'client')
     for (const plugin of plugins) {
       expect(manifest.exports[exportKey(plugin)]).toEqual({
         types: `./lib/types/${plugin}/index.d.ts`,

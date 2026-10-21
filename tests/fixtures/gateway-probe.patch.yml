@@ -1,0 +1,3 @@
+- insert:
+    - id: otr-test-gateway-probe
+      name: ./gateway-probe.mjs

@@ -1,7 +1,7 @@
 {
   "name": "dsh-off-the-record",
   "description": "Keeps your DeepSeek Harness sessions, secrets, and searches off DeepSeek's record",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -35,6 +35,9 @@
       "types": "./lib/types/tool-vault/index.d.ts",
       "default": "./lib/tool-vault/index.js"
     },
+    "./client": {
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -48,6 +51,14 @@
         "./patches/disable-telemetry.patch.yml",
         "./patches/private-search.patch.yml",
         "./patches/secrets-vault.patch.yml"
+      ]
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
       ]
     }
   },
@@ -63,6 +74,7 @@
     "@deepseek-ai/dsh-launch-environment": "0.2.1-rc.2",
     "@deepseek-ai/dsh-sandbox": "0.2.1-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2",
     "@deepseek-ai/dsh-web": "0.2.1-rc.2",
     "@deepseek-ai/schemastery": "3.18.5"
   },
@@ -71,16 +83,25 @@
     "@deepseek-ai/cordis-plugin-include": "1.0.10",
     "@deepseek-ai/cordis-plugin-loader": "1.0.6",
     "@deepseek-ai/dsh": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-api-remotes": "0.2.1-rc.2",
     "@deepseek-ai/dsh-base": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-store": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.2",
     "@deepseek-ai/dsh-credentials": "0.2.1-rc.2",
     "@deepseek-ai/dsh-launch-environment": "0.2.1-rc.2",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
     "@deepseek-ai/dsh-llm-mock-server": "0.2.1-rc.2",
     "@deepseek-ai/dsh-sandbox": "0.2.1-rc.2",
     "@deepseek-ai/dsh-sandbox-policy": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-settings": "0.2.1-rc.2",
     "@deepseek-ai/dsh-shell": "0.2.1-rc.2",
     "@deepseek-ai/dsh-shell-env": "0.2.1-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2",
     "@deepseek-ai/dsh-user-approval": "0.2.1-rc.2",
     "@deepseek-ai/dsh-web": "0.2.1-rc.2",
     "@deepseek-ai/dsh-web-app": "0.2.1-rc.2",
@@ -88,11 +109,18 @@
     "@deepseek-ai/schemastery": "3.18.5",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.20.1",
+    "@types/react": "~18.3.31",
+    "@types/react-dom": "~18.3.7",
+    "immer": "10.2.0",
     "js-yaml": "^4.3.2",
     "oxlint": "1.81.0",
     "oxlint-tsgolint": "7.0.2001",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "zod": "4.4.3",
+    "zustand": "4.5.7"
   }
 }

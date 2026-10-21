@@ -49,6 +49,8 @@ export interface TaskOptions {
   readonly prepareHome?: (home: string, dshHome: string) => void
   /** Runs after the task, before cleanup. */
   readonly inspectHome?: (home: string, dshHome: string) => void
+  /** Extra environment for the harness process. */
+  readonly env?: Readonly<Record<string, string>>
 }
 
 /**
@@ -63,7 +65,7 @@ export async function runTask(patches: readonly string[], options: TaskOptions =
   scratch.push(home)
   const run = (args: readonly string[]) => promisify(execFile)(process.execPath, [dshBin, ...args], {
     cwd: home,
-    timeout: 120_000,
+    timeout: Number(process.env.OTR_BOOT_TIMEOUT_MS ?? 120_000),
     env: {
       PATH: process.env.PATH ?? '',
       HOME: home,
@@ -71,6 +73,7 @@ export async function runTask(patches: readonly string[], options: TaskOptions =
       DEEPSEEK_BASE_URL: server.baseURL,
       DEEPSEEK_API_KEY: 'mock-key',
       DSH_TELEMETRY_OTLP_URL: options.otlpUrl ?? 'http://127.0.0.1:9/v1/logs',
+      ...options.env,
     },
   })
   try {

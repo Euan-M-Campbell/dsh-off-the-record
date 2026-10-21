@@ -16,7 +16,10 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["node"]
+    "types": ["node"],
+    // The browser half (src/client) is React; the Host half never touches the DOM.
+    "jsx": "react-jsx",
+    "lib": ["es2024", "dom", "dom.iterable"]
   },
   "include": ["src", "tests", "scripts"]
 }

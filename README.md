@@ -2,7 +2,7 @@
 
 > **dsh-off-the-record** keeps your sessions, secrets, and searches off DeepSeek's record.
 
-**Status: 0.4.1.** Disable telemetry, private search, the secrets vault, and status checks are ready; the settings page is in progress.
+**Status: 0.5.0.** Disable telemetry, private search, the secrets vault, status checks, and the settings page are ready.
 
 A bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) with three parts, each of which can be turned off on its own:
 
@@ -17,13 +17,13 @@ The harness still keeps your session log on your machine, and the model provider
 Tested with DSH `0.2.1-rc.2`. The bundle also loads on later releases; when a release changes a row it manages, that override is skipped with a startup warning (`patch: entry … not found`) until the bundle is updated.
 
 ```sh
-dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.4.1
+dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.5.0
 ```
 
 Desktop users install with the `dsh` command that Desktop sets up (**Manage dsh Command… → Install**), into the Desktop profile:
 
 ```sh
-dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.4.1
+dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.5.0
 ```
 
 Watch the first start after installing or upgrading either the harness or this bundle. If the harness cannot load the bundle at all, it prints `dsh: skipping profile bundle "dsh-off-the-record"` and starts with every channel back on.
@@ -151,7 +151,7 @@ The key is sent only to `api.search.brave.com`; the endpoint cannot be changed.
 
 The model uses your secrets by name; their values stay out of the conversation, the session log, and model requests.
 
-Add a secret by editing the harness credential file, `~/.dsh/.credentials.yaml` (only your OS user can read it; the harness picks up changes immediately). Each secret is a record named `vault/` plus its name in lowercase, with `_` written as `-`:
+Add a secret on the [settings page](#settings-page), or by editing the harness credential file, `~/.dsh/.credentials.yaml` (only your OS user can read it; the harness picks up changes immediately). Each secret is a record named `vault/` plus its name in lowercase, with `_` written as `-`:
 
 ```yaml
 version: 1
@@ -175,6 +175,16 @@ Every tool result, from any tool, has secret values replaced with `[secret:NAME]
 
 **What this does not protect against.** On this machine the agent could still read the vault deliberately, for example by opening `~/.dsh/.credentials.yaml`, or transform a value (reversing it, splitting it up) or send it over the network from a command. Run tools in an isolated box to prevent that. The vault is empty in one-shot `headless` runs, which have no credential store.
 
+## Settings page
+
+In the Web UI and the Desktop app, open **Settings → Plugins → dsh-off-the-record**. The page shows:
+
+- **Disable telemetry**: each channel's state, and when something turned one back on, the file responsible. Live channels (the session log on DeepSeek requests, desktop analytics) have a **Keep off** switch; the others name the line to remove from `cordis.patch.yml`. You can also reset the anonymous installation id here.
+- **Private search**: choose SearXNG or Brave, set the SearXNG instance, and store or remove the Brave key.
+- **Secrets vault**: your secrets by name, with **Add** and **Remove**. A value you type goes to the harness once and is never shown again.
+
+The page is in English and Chinese. Every change is checked by the harness before it applies: an insecure SearXNG URL, a reserved secret name, or a short value is refused with the reason. Changes go to your profile's `cordis.patch.yml`, or to the credential store for keys and secrets.
+
 ## Status checks
 
 At every start, and whenever the configuration changes, the bundle checks each setting it manages. If something has turned a channel back on, it prints a warning that names the file responsible and how to undo it:
@@ -185,7 +195,7 @@ dsh-off-the-record: Session log on DeepSeek requests is on (set in /Users/you/.d
 
 It also warns when a harness release has renamed a setting the bundle manages, and when `web_search` points at a DeepSeek provider. When everything is as the bundle sets it, it prints nothing.
 
-A settings page that shows the same status is planned.
+The settings page shows the same status.
 
 ## Develop
 

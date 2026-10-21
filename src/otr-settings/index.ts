@@ -10,13 +10,17 @@
 
 import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { type Context, Service } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
+import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { checkComposition, describeReport, type CompositionReport, type LaterLayer, type RowView } from './check.ts'
+import { pageStatus, setBraveKey, setChannel, setSearchProvider, setSearxngUrl, setSecret, type PageStatus } from './page.ts'
 
 export { CHANNELS, checkComposition, describeReport, PRIVATE_SEARCH_PROVIDERS } from './check.ts'
 export type { ChannelState, ChannelStatus, CompositionReport, LaterLayer, RowView, SearchStatus } from './check.ts'
+export { BRAVE_KEY_REF, LIVE_CHANNELS } from './page.ts'
+export type { PageStatus } from './page.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -51,7 +55,7 @@ const ROW_ID_PATTERN = (id: string): RegExp => new RegExp(`^[\\s-]*id:\\s*['"]?$
 /**
  * The Off the Record service.
  */
-export default class OffTheRecord extends Service {
+export default class OffTheRecord extends TypertRemoteService {
   static inject = ['loader']
 
   static Config: z<Config> = z.object({
@@ -85,14 +89,72 @@ export default class OffTheRecord extends Service {
    * The latest report, computing it first if none exists yet.
    * @returns every managed channel's state and the search selection.
    */
+  @Remote
   async status(): Promise<OffTheRecordStatus> {
     return this.latest ?? await this.refresh()
+  }
+
+  /**
+   * Everything the settings page shows, computed fresh.
+   * @returns status, live switches, search setup, and secret names.
+   */
+  @Remote
+  async pageStatus(): Promise<PageStatus> {
+    return await pageStatus(this.ctx, await this.refresh(), this.rows())
+  }
+
+  /**
+   * Turn a live channel off (restore this bundle's setting) or on.
+   * @param id - channel row id.
+   * @param off - true to turn it off.
+   */
+  @Remote
+  async setChannel(id: string, off: boolean): Promise<void> {
+    await setChannel(this.ctx, id, off)
+  }
+
+  /**
+   * Choose the private search provider.
+   * @param provider - `searxng` or `brave`.
+   */
+  @Remote
+  async setSearchProvider(provider: string): Promise<void> {
+    await setSearchProvider(this.ctx, provider)
+  }
+
+  /**
+   * Set or clear the SearXNG instance URL.
+   * @param url - the instance root, or empty to clear it.
+   */
+  @Remote
+  async setSearxngUrl(url: string): Promise<void> {
+    await setSearxngUrl(this.ctx, url)
+  }
+
+  /**
+   * Store or remove the Brave API key; it is written to the credential store, never to configuration.
+   * @param key - the key, or empty to remove it.
+   */
+  @Remote
+  async setBraveKey(key: string): Promise<void> {
+    await setBraveKey(this.ctx, key)
+  }
+
+  /**
+   * Add, replace, or (with an empty value) remove a vault secret. Values travel to the Host only.
+   * @param name - the secret name.
+   * @param value - the value, or empty to remove it.
+   */
+  @Remote
+  async setSecret(name: string, value: string): Promise<void> {
+    await setSecret(this.ctx, name, value)
   }
 
   /**
    * Delete the anonymous installation id. The harness mints a new one at the next launch.
    * @returns whether a file was removed, and that the change applies at the next launch.
    */
+  @Remote
   async resetAnonymousId(): Promise<{ readonly removed: boolean; readonly takesEffect: 'next-launch' }> {
     const home = this.profile()?.home
     if (home === undefined) throw new Error('offTheRecord: the harness home is unknown in this process')
@@ -106,13 +168,17 @@ export default class OffTheRecord extends Service {
   }
 
   /** Recompute the report and log it when it changed. */
-  private async refresh(): Promise<OffTheRecordStatus> {
+  private rows(): RowView[] {
     const rows: RowView[] = []
     for (const entry of this.ctx.loader.entries()) {
       rows.push({ id: entry.options.id, disabled: entry.options.disabled, config: entry.options.config })
     }
+    return rows
+  }
+
+  private async refresh(): Promise<OffTheRecordStatus> {
     const profile = this.profile()
-    const report = checkComposition(rows, await this.laterLayers(profile))
+    const report = checkComposition(this.rows(), await this.laterLayers(profile))
     const status: OffTheRecordStatus = {
       ...report,
       ...profile === undefined ? {} : { profile: profile.name },
