@@ -10,6 +10,9 @@ import { WebError, type WebSearchSource } from '@deepseek-ai/dsh-web'
 /** Default per-search deadline, in addition to the caller's signal. */
 export const DEFAULT_SEARCH_TIMEOUT_MS = 15_000
 
+/** Largest response body read from a search provider; search results are far smaller. */
+export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+
 /** Default `user-agent` header; identifies the bundle, not the user. */
 export const DEFAULT_USER_AGENT = 'dsh-off-the-record'
 
@@ -74,11 +77,47 @@ export async function getJson(options: SearchRequestOptions): Promise<unknown> {
     throw new WebError(options.describeStatus(response.status), 'WEB_PROVIDER_ERROR')
   }
 
+  let body: string
   try {
-    return await response.json() as unknown
+    body = await readBounded(response, MAX_RESPONSE_BYTES)
+  } catch (error: unknown) {
+    if (error instanceof WebError) throw error
+    throw failure(error, 'response could not be read')
+  }
+  try {
+    return JSON.parse(body) as unknown
   } catch (error: unknown) {
     throw failure(error, 'returned a body that is not JSON')
   }
+}
+
+/**
+ * Read a response body as text, refusing one larger than the limit.
+ * @param response - the response.
+ * @param limit - most bytes accepted.
+ * @returns the decoded body.
+ */
+async function readBounded(response: Response, limit: number): Promise<string> {
+  const declared = Number(response.headers.get('content-length') ?? '')
+  if (Number.isFinite(declared) && declared > limit) {
+    void response.body?.cancel().catch(() => undefined)
+    throw new WebError(`the search response is larger than ${String(limit)} bytes`, 'WEB_PROVIDER_ERROR')
+  }
+  if (response.body === null) return ''
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > limit) {
+      void reader.cancel().catch(() => undefined)
+      throw new WebError(`the search response is larger than ${String(limit)} bytes`, 'WEB_PROVIDER_ERROR')
+    }
+    chunks.push(value)
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks))
 }
 
 /**

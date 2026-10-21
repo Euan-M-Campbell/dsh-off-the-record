@@ -290,8 +290,14 @@ export function apply(ctx: Context, config: Config): void {
         const result: ShellRunResult = await (await shellCtx.shell.execute(spec)).result()
         if (result.aborted) throw new Error('tool call aborted')
         // Redact here as well as in post-execute, and drop spill paths: a spilled
-        // file holds the raw output, so the model is never pointed at it.
-        const stream = (part: ShellRunResult['stdout']) => ({ text: matcher.redact(part.text), truncated: part.truncated })
+        // file holds the raw output, so the model is never pointed at it. The
+        // values just resolved join the matcher, in case the vault changed after
+        // the shared matcher was last rebuilt.
+        const local = buildMatcher(
+          [...ctx.vault.redactionEntries(), ...[...values].map(([secret, value]) => ({ name: secret, value }))],
+          config.redactEncodings, config.minRedactLength,
+        )
+        const stream = (part: ShellRunResult['stdout']) => ({ text: local.redact(part.text), truncated: part.truncated })
         return {
           cwd: spec.workdir,
           secrets: names,

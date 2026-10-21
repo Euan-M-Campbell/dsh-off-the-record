@@ -204,3 +204,18 @@ describe('web-search-searxng plugin', () => {
     await expect(ctx.plugin(searxng, { baseURL: 'http://search.example.com' })).rejects.toThrow('use https')
   })
 })
+
+describe('response size limit', () => {
+  it('refuses a body larger than 4 MiB', async () => {
+    const big = JSON.stringify({ results: [{ url: 'https://a.test/', content: 'x'.repeat(5 * 1024 * 1024) }] })
+    stubFetch(new Response(big, { status: 200 }))
+    await expect(new SearxngSearchProvider(() => settings).search({ query: 'q' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR', message: expect.stringContaining('larger than') }))
+  })
+
+  it('refuses early when the declared length is too large', async () => {
+    stubFetch(new Response('{}', { status: 200, headers: { 'content-length': String(10 * 1024 * 1024) } }))
+    await expect(new SearxngSearchProvider(() => settings).search({ query: 'q' }))
+      .rejects.toThrow(expect.objectContaining({ message: expect.stringContaining('larger than') }))
+  })
+})
