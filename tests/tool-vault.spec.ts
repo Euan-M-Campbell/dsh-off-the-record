@@ -49,6 +49,7 @@ describe('tool-vault plugin', () => {
         "create_secret": "Generate a new random secret and store it in the vault under a new name, for example a session key or a password for a local service. You never see the value. You cannot store a value you supply: ask the user to add secrets they already have.",
         "list_secrets": "List the secrets the user has stored in the vault, by name. Values are never shown. Use a listed name with run_with_secrets to pass its value to a command.",
         "run_with_secrets": "Run a bash command with vault secrets set as environment variables. Name the secrets in \`secrets\`; refer to them in the command as $NAME, never by value. Runs like bash, in a fresh shell under the same sandbox. Any secret value that appears in the output is replaced with [secret:NAME]. Do not try to reveal, transform, or send a secret value.",
+        "run_with_secrets_powershell": "Run a PowerShell command with vault secrets set as environment variables. Name the secrets in \`secrets\`; refer to them in the command as $env:NAME, never by value. Runs like pwsh, in a fresh shell under the same sandbox. Any secret value that appears in the output is replaced with [secret:NAME]. Do not try to reveal, transform, or send a secret value.",
       }
     `)
   })

@@ -56,7 +56,13 @@ export const DESCRIPTIONS = {
   run_with_secrets: 'Run a bash command with vault secrets set as environment variables. Name the secrets in `secrets`; '
     + 'refer to them in the command as $NAME, never by value. Runs like bash, in a fresh shell under the same sandbox. '
     + 'Any secret value that appears in the output is replaced with [secret:NAME]. Do not try to reveal, transform, or send a secret value.',
+  run_with_secrets_powershell: 'Run a PowerShell command with vault secrets set as environment variables. Name the secrets in `secrets`; '
+    + 'refer to them in the command as $env:NAME, never by value. Runs like pwsh, in a fresh shell under the same sandbox. '
+    + 'Any secret value that appears in the output is replaced with [secret:NAME]. Do not try to reveal, transform, or send a secret value.',
 } as const
+
+/** The harness composes PowerShell instead of bash on Windows, and the shell executor does not say which it is. */
+const POWERSHELL = process.platform === 'win32'
 
 const SECRET_INFO_SCHEMA = {
   type: 'object',
@@ -216,10 +222,10 @@ export function apply(ctx: Context, config: Config): void {
 
     shellCtx.tools.register(defineTool({
       name: 'run_with_secrets',
-      description: DESCRIPTIONS.run_with_secrets,
+      description: POWERSHELL ? DESCRIPTIONS.run_with_secrets_powershell : DESCRIPTIONS.run_with_secrets,
       parameters: {
         description: { type: 'string', required: true, description: 'What this command does, in 5-10 words (shown in the UI).' },
-        command: { type: 'string', required: true, description: 'The bash command. Refer to each secret as $NAME.' },
+        command: { type: 'string', required: true, description: POWERSHELL ? 'The PowerShell command. Refer to each secret as $env:NAME.' : 'The bash command. Refer to each secret as $NAME.' },
         secrets: { type: 'array', items: { type: 'string' }, required: true, description: 'Names of the vault secrets to set as environment variables, as listed by list_secrets.' },
         timeoutMs: { type: 'number', description: 'Timeout in milliseconds. The executor applies its default and cap, and kills the command on expiry.' },
         workdir: { type: 'string', description: 'Working directory. Defaults to the session workspace; a relative path is resolved against it.' },
@@ -254,7 +260,7 @@ export function apply(ctx: Context, config: Config): void {
       execute: async (args, exec) => {
         if (args.command.trim().length === 0) throw new Error('invalid command: expected a non-empty string')
         const names = [...new Set(args.secrets)]
-        if (names.length === 0) throw new Error('name at least one secret in `secrets`; use bash for commands that need none')
+        if (names.length === 0) throw new Error(`name at least one secret in \`secrets\`; use ${POWERSHELL ? 'pwsh' : 'bash'} for commands that need none`)
         const invalid = names.map(secretNameProblem).filter((problem): problem is string => problem !== undefined)
         if (invalid.length > 0) throw new Error(invalid.join('; '))
         const values = await ctx.vault.resolveForExecution(names.map(entry => entry as SecretName))

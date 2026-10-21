@@ -58,12 +58,23 @@ async function run(bundle: boolean, toolName: string, args: unknown, prepare?: (
   return { requests, files }
 }
 
-const printEverywhere = [
-  'printf "raw:%s\\n" "$DB_PASSWORD"',
-  'printf "%s" "$DB_PASSWORD" | base64',
-  'printf "admin:%s" "$DB_PASSWORD" | base64',
-  'node -e \'const v = process.env.DB_PASSWORD; console.log(JSON.stringify({ v }), encodeURIComponent(v), Buffer.from(v).toString("base64url"))\'',
-].join('; ')
+// The harness composes PowerShell (tool "pwsh") instead of bash on Windows.
+const windows = process.platform === 'win32'
+const shellTool = windows ? 'pwsh' : 'bash'
+const printEnvFile = windows ? 'Get-Content app.env' : 'cat app.env'
+const printEverywhere = windows
+  ? [
+      'Write-Output "raw:$env:DB_PASSWORD"',
+      '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($env:DB_PASSWORD))',
+      '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("admin:$env:DB_PASSWORD"))',
+      'node -e "const v = process.env.DB_PASSWORD; console.log(JSON.stringify({ v }), encodeURIComponent(v), Buffer.from(v).toString(\'base64url\'))"',
+    ].join('; ')
+  : [
+      'printf "raw:%s\\n" "$DB_PASSWORD"',
+      'printf "%s" "$DB_PASSWORD" | base64',
+      'printf "admin:%s" "$DB_PASSWORD" | base64',
+      'node -e \'const v = process.env.DB_PASSWORD; console.log(JSON.stringify({ v }), encodeURIComponent(v), Buffer.from(v).toString("base64url"))\'',
+    ].join('; ')
 
 describe('secrets vault, booted', { timeout: 300_000 }, () => {
   it('passes the secret to the command and keeps every form of it out of model requests and the session log', async () => {
@@ -77,7 +88,7 @@ describe('secrets vault, booted', { timeout: 300_000 }, () => {
   })
 
   it('redacts a secret that any other tool returns', async () => {
-    const { requests, files } = await run(true, 'bash', { description: 'Show the env file', command: 'cat app.env' }, (home) => {
+    const { requests, files } = await run(true, shellTool, { description: 'Show the env file', command: printEnvFile }, (home) => {
       writeFileSync(join(home, 'app.env'), `DATABASE_PASSWORD=${SECRET}\n`)
     })
     const sent = JSON.stringify(requests.map(request => request.body))
@@ -87,7 +98,7 @@ describe('secrets vault, booted', { timeout: 300_000 }, () => {
   })
 
   it('shows the raw value without the bundle (control)', async () => {
-    const { requests } = await run(false, 'bash', { description: 'Show the env file', command: 'cat app.env' }, (home) => {
+    const { requests } = await run(false, shellTool, { description: 'Show the env file', command: printEnvFile }, (home) => {
       writeFileSync(join(home, 'app.env'), `DATABASE_PASSWORD=${SECRET}\n`)
     })
     expect(leaksIn(JSON.stringify(requests.map(request => request.body)))).not.toEqual([])
