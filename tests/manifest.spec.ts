@@ -1,5 +1,6 @@
 import { globSync, readFileSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { load } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
@@ -66,7 +67,7 @@ describe('bundle manifest', () => {
       if (icon !== undefined) expect(existsSync(require.resolve(icon))).toBe(true)
     }
     const declared = (JSON.parse(readFileSync(new URL('package.json', root), 'utf8')) as { icon: string }).icon
-    const icons = [new URL(declared, root).pathname, ...plugins.map(plugin => require.resolve(`dsh-off-the-record/${plugin}/icon`))]
+    const icons = [fileURLToPath(new URL(declared, root)), ...plugins.map(plugin => require.resolve(`dsh-off-the-record/${plugin}/icon`))]
     // Each component has its own icon, distinct from the bundle's and from each other.
     expect(new Set(icons).size).toBe(icons.length)
     for (const icon of icons) {
