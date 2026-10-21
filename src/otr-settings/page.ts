@@ -8,7 +8,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-settings'
-import { secretName, secretNameProblem, type SecretInfo } from '../vault/index.ts'
+import { secretName, secretNameProblem, workspaceDirectory, type SecretInfo } from '../vault/index.ts'
 import { baseUrlProblem } from '../web-search-searxng/provider.ts'
 import type { CompositionReport, RowView } from './check.ts'
 
@@ -31,7 +31,51 @@ export interface PageStatus extends CompositionReport {
   readonly liveChannels: readonly string[]
   readonly searxng: { readonly baseURL: string; readonly problem?: string }
   readonly brave: { readonly keyConfigured: boolean; readonly keyWritable: boolean }
-  readonly vault: { readonly available: boolean; readonly writable: boolean; readonly secrets: readonly SecretInfo[] }
+  readonly vault: {
+    readonly available: boolean
+    readonly writable: boolean
+    /** Every secret in every scope. */
+    readonly secrets: readonly SecretInfo[]
+    /** Workspaces a secret can be added to: the harness's workspaces, and directories that already hold secrets. */
+    readonly workspaces: readonly WorkspaceChoice[]
+  }
+}
+
+/** One workspace the page offers as a secret's scope. */
+export interface WorkspaceChoice {
+  /** Canonical directory, the scope's key. */
+  readonly directory: string
+  /** The workspace's title in the harness, or the folder name. */
+  readonly title: string
+  /** Whether the harness still lists it as a workspace. */
+  readonly registered: boolean
+}
+
+/** The harness workspace registry, where the Web app composes it; only the fields read here. */
+interface WorkspaceRegistryView {
+  list(): readonly { readonly path: string; readonly title: string }[]
+}
+
+/**
+ * Workspaces a secret can belong to: the harness's own (Web and Desktop), and
+ * any directory that already holds secrets, such as a removed workspace or one
+ * used from the CLI.
+ * @param ctx - the Off the Record service context.
+ * @param secrets - every stored secret.
+ * @returns choices, harness workspaces first.
+ */
+export function workspaceChoices(ctx: Context, secrets: readonly SecretInfo[]): WorkspaceChoice[] {
+  const registry = ctx.get('workspaceRegistry') as WorkspaceRegistryView | undefined
+  const choices = new Map<string, WorkspaceChoice>()
+  for (const workspace of registry?.list() ?? []) {
+    const directory = workspaceDirectory(workspace.path)
+    choices.set(directory, { directory, title: workspace.title, registered: true })
+  }
+  for (const secret of secrets) {
+    if (secret.directory === undefined || choices.has(secret.directory)) continue
+    choices.set(secret.directory, { directory: secret.directory, title: secret.directory.split(/[\\/]/).filter(Boolean).at(-1) ?? secret.directory, registered: false })
+  }
+  return [...choices.values()]
 }
 
 /**
@@ -55,6 +99,7 @@ export async function pageStatus(
     ? { keyConfigured: false, keyWritable: false }
     : await credentials.describe(credentialRef(BRAVE_KEY_REF)).then(info => ({ keyConfigured: info.configured, keyWritable: info.writable }))
   const vault = ctx.get('vault')
+  const secrets = vault === undefined ? [] : [...await vault.listAll()]
   return {
     ...report,
     settingsAvailable: ctx.get('settings') !== undefined,
@@ -64,7 +109,8 @@ export async function pageStatus(
     vault: {
       available: vault !== undefined,
       writable: vault !== undefined && credentials !== undefined,
-      secrets: vault === undefined ? [] : [...await vault.list()],
+      secrets,
+      workspaces: workspaceChoices(ctx, secrets),
     },
   }
 }
@@ -143,12 +189,21 @@ export async function setBraveKey(ctx: Context, key: string): Promise<void> {
  * @param ctx - the Off the Record service context.
  * @param name - the secret name.
  * @param value - the value, or empty to remove the secret.
+ * @param directory - a workspace directory from the page's choices, or empty for a global secret.
  */
-export async function setSecret(ctx: Context, name: string, value: string): Promise<void> {
+export async function setSecret(ctx: Context, name: string, value: string, directory: string): Promise<void> {
   const vault = ctx.get('vault')
   if (vault === undefined) throw new Error('the secrets vault is not running in this profile')
   const problem = secretNameProblem(name)
   if (problem !== undefined) throw new Error(problem)
-  if (value.length === 0) await vault.unset(secretName(name))
-  else await vault.set(secretName(name), value)
+  let scope: ReturnType<typeof workspaceDirectory> | undefined
+  if (directory.length > 0) {
+    scope = workspaceDirectory(directory)
+    // Only a known workspace: a typed path must not create a scope nothing uses.
+    if (!workspaceChoices(ctx, await vault.listAll()).some(choice => choice.directory === scope)) {
+      throw new Error(`${directory} is not a workspace`)
+    }
+  }
+  if (value.length === 0) await vault.unset(secretName(name), scope)
+  else await vault.set(secretName(name), value, scope)
 }

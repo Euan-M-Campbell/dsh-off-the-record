@@ -20,7 +20,7 @@ export interface OffTheRecordRemote {
   setSearchProvider(provider: string): Promise<CallResult<unknown>>
   setSearxngUrl(url: string): Promise<CallResult<unknown>>
   setBraveKey(key: string): Promise<CallResult<unknown>>
-  setSecret(name: string, value: string): Promise<CallResult<unknown>>
+  setSecret(name: string, value: string, directory: string): Promise<CallResult<unknown>>
   setNewIdEachStart(on: boolean): Promise<CallResult<unknown>>
 }
 
@@ -42,7 +42,8 @@ export interface PageFace {
   setSearchProvider(provider: string): void
   setSearxngUrl(url: string): void
   setBraveKey(key: string): void
-  setSecret(name: string, value: string): void
+  /** `directory` is a workspace's, or empty for a global secret. */
+  setSecret(name: string, value: string, directory: string): void
   setNewIdEachStart(on: boolean): void
 }
 
@@ -85,7 +86,7 @@ export class PageController {
       setSearchProvider: (provider) => { void this.run('provider', () => this.remote.setSearchProvider(provider)) },
       setSearxngUrl: (url) => { void this.run('searxng', () => this.remote.setSearxngUrl(url)) },
       setBraveKey: (key) => { void this.run('brave', () => this.remote.setBraveKey(key)) },
-      setSecret: (name, value) => { void this.run('secret', () => this.remote.setSecret(name, value)) },
+      setSecret: (name, value, directory) => { void this.run('secret', () => this.remote.setSecret(name, value, directory)) },
       setNewIdEachStart: (on) => { void this.run('anonymous-id', () => this.remote.setNewIdEachStart(on)) },
     }
   }

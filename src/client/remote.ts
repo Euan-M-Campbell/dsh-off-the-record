@@ -38,7 +38,7 @@ export const OFF_THE_RECORD_REMOTE = createTypertRemoteInfo({
     'offTheRecord/setSearchProvider': method('setSearchProvider', 'Choose the private search provider.', [['provider', text]], nothing),
     'offTheRecord/setSearxngUrl': method('setSearxngUrl', 'Set or clear the SearXNG instance URL.', [['url', text]], nothing),
     'offTheRecord/setBraveKey': method('setBraveKey', 'Store or remove the Brave API key.', [['key', text]], nothing),
-    'offTheRecord/setSecret': method('setSecret', 'Add, replace, or remove a vault secret.', [['name', text], ['value', text]], nothing),
+    'offTheRecord/setSecret': method('setSecret', 'Add, replace, or remove a vault secret.', [['name', text], ['value', text], ['directory', text]], nothing),
     'offTheRecord/setNewIdEachStart': method('setNewIdEachStart', 'Turn a new anonymous installation id at every start on or off.', [['on', flag]], nothing),
   },
 }, z)

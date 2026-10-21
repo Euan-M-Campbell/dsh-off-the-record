@@ -1,5 +1,9 @@
+import { mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { isCredentialKeySegment } from '@deepseek-ai/dsh-credentials'
 import { describe, expect, it } from 'vitest'
-import { nameFromRecordId, recordId, secretName, secretNameProblem } from '../src/vault/index.ts'
+import { nameFromRecordId, nameFromWorkspaceRecordId, recordId, secretName, secretNameProblem, workspaceDirectory, workspaceRecordId } from '../src/vault/index.ts'
 import { randomSecret, readEntry } from '../src/vault-local/index.ts'
 
 describe('secret names', () => {
@@ -64,5 +68,26 @@ describe('vault records', () => {
     expect(readEntry({ kind: 'api-key', key: '' })).toBeUndefined()
     expect(readEntry({ kind: 'grant', payload: { token: 'x' } })).toBeUndefined()
     expect(readEntry({ kind: 'grant', payload: null })).toBeUndefined()
+  })
+})
+
+describe('workspace scope keys', () => {
+  it('canonicalizes a directory through symlinks, and keeps a missing one absolute', () => {
+    const realpath = (path: string) => realpathSync.native(path)
+    const real = mkdtempSync(join(tmpdir(), 'otr-ws-'))
+    const link = `${real}-link`
+    symlinkSync(real, link)
+    expect(workspaceDirectory(link)).toBe(realpath(real))
+    expect(workspaceDirectory(`${real}/../${real.split('/').at(-1) ?? ''}`)).toBe(realpath(real))
+    expect(workspaceDirectory('/no/such/dir/anywhere')).toBe('/no/such/dir/anywhere')
+  })
+
+  it('names a workspace record by directory hash and secret name, and reads the name back', () => {
+    const id = workspaceRecordId('/work/shop' as never, secretName('DB_URL'))
+    expect(id).toMatch(/^d[0-9a-f]{16}-db-url$/)
+    expect(isCredentialKeySegment(id)).toBe(true)
+    expect(workspaceRecordId('/work/blog' as never, secretName('DB_URL'))).not.toBe(id)
+    expect(nameFromWorkspaceRecordId(id)).toBe('DB_URL')
+    expect(nameFromWorkspaceRecordId('db-url')).toBeUndefined()
   })
 })

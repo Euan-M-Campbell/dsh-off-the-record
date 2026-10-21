@@ -46,8 +46,8 @@ describe('tool-vault plugin', () => {
   it('pins the model-facing descriptions', () => {
     expect(toolVault.DESCRIPTIONS).toMatchInlineSnapshot(`
       {
-        "create_secret": "Generate a new random secret and store it in the vault under a new name, for example a session key or a password for a local service. You never see the value. You cannot store a value you supply: ask the user to add secrets they already have.",
-        "list_secrets": "List the secrets the user has stored in the vault, by name. Values are never shown. Use a listed name with run_with_secrets to pass its value to a command.",
+        "create_secret": "Generate a new random secret and store it in the vault under a new name, for example a session key or a password for a local service. It belongs to this workspace unless you set scope to global. You never see the value. You cannot store a value you supply: ask the user to add secrets they already have.",
+        "list_secrets": "List the secrets you can use here, by name: global ones, and this workspace's own, which replace global ones of the same name. Values are never shown. Use a listed name with run_with_secrets to pass its value to a command.",
         "run_with_secrets": "Run a bash command with vault secrets set as environment variables. Name the secrets in \`secrets\`; refer to them in the command as $NAME, never by value. Runs like bash, in a fresh shell under the same sandbox. Any secret value that appears in the output is replaced with [secret:NAME]. Do not try to reveal, transform, or send a secret value.",
         "run_with_secrets_powershell": "Run a PowerShell command with vault secrets set as environment variables. Name the secrets in \`secrets\`; refer to them in the command as $env:NAME, never by value. Runs like pwsh, in a fresh shell under the same sandbox. Any secret value that appears in the output is replaced with [secret:NAME]. Do not try to reveal, transform, or send a secret value.",
       }
@@ -58,10 +58,10 @@ describe('tool-vault plugin', () => {
     const { ctx } = await mount()
     expect(text(await run(ctx, 'list_secrets'))).toBe('The vault is empty. The user adds secrets outside the conversation.')
     const created = await run(ctx, 'create_secret', { name: 'SESSION_KEY', length: 24, alphabet: 'hex' })
-    expect(text(created)).toBe('Created SESSION_KEY (24 hex characters). Pass it to a command with run_with_secrets as $SESSION_KEY.')
+    expect(text(created)).toBe('Created SESSION_KEY (global, 24 hex characters). Pass it to a command with run_with_secrets as $SESSION_KEY.')
     const [entry] = ctx.vault.redactionEntries()
     expect(JSON.stringify(created)).not.toContain(entry?.value)
-    expect(text(await run(ctx, 'list_secrets'))).toBe('SESSION_KEY (generated)')
+    expect(text(await run(ctx, 'list_secrets'))).toBe('SESSION_KEY (global, generated)')
     expect((await run(ctx, 'create_secret', { name: 'SESSION_KEY' })).isError).toBe(true)
     expect(text(await run(ctx, 'create_secret', { name: 'PATH' }))).toContain('reserved')
     expect(text(await run(ctx, 'create_secret', { name: 'SHORT_ONE', length: 8 }))).toContain('from 16 to 256')
@@ -129,5 +129,51 @@ describe('Brave and a late credential store', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('session workspace', () => {
+  const { sessionWorkspace } = toolVault
+  const session = (id: string, cwd?: string, parentSession?: string) => ({ header: { id, ...cwd === undefined ? {} : { cwd }, ...parentSession === undefined ? {} : { parentSession } } })
+
+  it('is the directory the root session was created in', () => {
+    expect(sessionWorkspace(session('root', '/work/shop'), undefined)).toBe('/work/shop')
+    expect(sessionWorkspace(session('root'), undefined)).toBeUndefined()
+    expect(sessionWorkspace(undefined, undefined)).toBeUndefined()
+  })
+
+  it('follows live parents, so a subagent started elsewhere keeps the parent workspace', () => {
+    const live = new Map([['root', session('root', '/work/shop')], ['child', session('child', '/work/blog', 'root')]])
+    const sessions = { get: (id: never) => live.get(id) }
+    expect(sessionWorkspace(session('grandchild', '/work/other', 'child'), sessions)).toBe('/work/shop')
+  })
+
+  it('falls back to the session\'s own recorded directory when the parent is not loaded, and stops on a cycle', () => {
+    expect(sessionWorkspace(session('child', '/work/shop', 'gone'), { get: () => undefined })).toBe('/work/shop')
+    const loop = new Map([['a', session('a', '/work/a', 'b')], ['b', session('b', '/work/b', 'a')]])
+    expect(sessionWorkspace(loop.get('a'), { get: (id: never) => loop.get(id) })).toMatch(/^\/work\/[ab]$/)
+  })
+})
+
+describe('vault tools in a workspace', () => {
+  async function runIn(ctx: Context, name: string, args: unknown, cwd: string) {
+    return await ctx.tools.execute({ callId: `call-${String(++call)}` as never, name, arguments: args, signal: new AbortController().signal, agent: { session: { header: { id: 's1', cwd } } } as never })
+  }
+
+  it('lists global and workspace secrets with their scope, and creates in the workspace by default', async () => {
+    const { ctx } = await mount()
+    await ctx.vault.set(secretName('DB_URL'), 'global-db-url')
+    await ctx.vault.set(secretName('SHOP_KEY'), 'shop-key-123', '/work/shop' as never)
+    expect(text(await runIn(ctx, 'list_secrets', {}, '/work/shop'))).toBe('DB_URL (global, user)\nSHOP_KEY (workspace, user)')
+    expect(text(await runIn(ctx, 'list_secrets', {}, '/work/blog'))).toBe('DB_URL (global, user)')
+    expect(text(await runIn(ctx, 'create_secret', { name: 'BLOG_KEY' }, '/work/blog'))).toContain('Created BLOG_KEY (workspace,')
+    expect(text(await runIn(ctx, 'create_secret', { name: 'SHARED_KEY', scope: 'global' }, '/work/blog'))).toContain('Created SHARED_KEY (global,')
+    expect(text(await runIn(ctx, 'list_secrets', {}, '/work/shop'))).toBe('DB_URL (global, user)\nSHARED_KEY (global, generated)\nSHOP_KEY (workspace, user)')
+  })
+
+  it('creates a global secret when the session has no workspace', async () => {
+    const { ctx } = await mount()
+    expect(text(await run(ctx, 'create_secret', { name: 'ANY_KEY' }))).toContain('Created ANY_KEY (global,')
+    expect(text(await run(ctx, 'create_secret', { name: 'WS_KEY', scope: 'workspace' }))).toContain('no workspace directory')
   })
 })

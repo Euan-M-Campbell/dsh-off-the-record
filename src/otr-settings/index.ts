@@ -22,7 +22,7 @@ import { pageStatus, setBraveKey, setChannel, setNewIdEachStart, setSearchProvid
 export { CHANNELS, checkComposition, describeReport, PRIVATE_SEARCH_PROVIDERS } from './check.ts'
 export type { ChannelState, ChannelStatus, CompositionReport, LaterLayer, RowView, SearchStatus } from './check.ts'
 export { BRAVE_KEY_REF, LIVE_CHANNELS } from './page.ts'
-export type { PageStatus } from './page.ts'
+export type { PageStatus, WorkspaceChoice } from './page.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -161,10 +161,11 @@ export default class OffTheRecord extends TypertRemoteService {
    * Add, replace, or (with an empty value) remove a vault secret. Values travel to the Host only.
    * @param name - the secret name.
    * @param value - the value, or empty to remove it.
+   * @param directory - a workspace directory, or empty for a global secret.
    */
   @Remote
-  async setSecret(name: string, value: string): Promise<void> {
-    await setSecret(this.ctx, name, value)
+  async setSecret(name: string, value: string, directory: string): Promise<void> {
+    await setSecret(this.ctx, name, value, directory)
   }
 
   /**

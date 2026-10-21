@@ -66,7 +66,7 @@ describe('settings page Remote, through the Gateway', { timeout: 300_000 }, () =
       ['setChannel', { id: 'session-log-deepseek', off: false }],
       ['setSearchProvider', { provider: 'brave' }],
       ['setBraveKey', { key: 'brave-test-key' }],
-      ['setSecret', { name: 'PAGE_SECRET', value: 'page-secret-value' }],
+      ['setSecret', { name: 'PAGE_SECRET', value: 'page-secret-value', directory: '' }],
       ['setNewIdEachStart', { on: false }],
       ['pageStatus', {}, 1500],
     ])
@@ -76,7 +76,7 @@ describe('settings page Remote, through the Gateway', { timeout: 300_000 }, () =
     expect(page.search.provider).toBe('brave')
     expect(page.channels.find(channel => channel.id === 'session-log-deepseek')?.state).toBe('on')
     expect(page.brave.keyConfigured).toBe(true)
-    expect(page.vault.secrets).toEqual([{ name: 'PAGE_SECRET', origin: 'user' }])
+    expect(page.vault.secrets).toEqual([{ name: 'PAGE_SECRET', origin: 'user', scope: 'global' }])
     expect(page.newIdEachStart).toBe(false)
     // Settings changes persist in the profile patch; secrets only in the credential store.
     expect(profilePatch).toContain('http://127.0.0.1:8888')
@@ -99,18 +99,20 @@ describe('settings page Remote, through the Gateway', { timeout: 300_000 }, () =
   it('refuses invalid changes with a reason', async () => {
     const { outcomes } = await probe([
       ['setSearxngUrl', { url: 'http://search.example.com' }],
-      ['setSecret', { name: 'PATH', value: 'whatever-123' }],
-      ['setSecret', { name: 'SHORT_ONE', value: 'abc' }],
+      ['setSecret', { name: 'PATH', value: 'whatever-123', directory: '' }],
+      ['setSecret', { name: 'SHORT_ONE', value: 'abc', directory: '' }],
+      ['setSecret', { name: 'SOME_KEY', value: 'some-value-123', directory: '/not/a/workspace' }],
       ['setChannel', { id: 'session-telemetry-otel', off: false }],
       ['setSearchProvider', { provider: 'deepseek-official' }],
     ])
     expect(outcomes.map(outcome => [outcome.method, outcome.ok])).toEqual([
-      ['setSearxngUrl', false], ['setSecret', false], ['setSecret', false], ['setChannel', false], ['setSearchProvider', false],
+      ['setSearxngUrl', false], ['setSecret', false], ['setSecret', false], ['setSecret', false], ['setChannel', false], ['setSearchProvider', false],
     ])
     expect(outcomes[0]?.error).toContain('use https')
     expect(outcomes[1]?.error).toContain('reserved')
     expect(outcomes[2]?.error).toContain('at least 8 characters')
-    expect(outcomes[3]?.error).toContain('cannot be changed from this page')
-    expect(outcomes[4]?.error).toContain('not a private search provider')
+    expect(outcomes[3]?.error).toContain('is not a workspace')
+    expect(outcomes[4]?.error).toContain('cannot be changed from this page')
+    expect(outcomes[5]?.error).toContain('not a private search provider')
   })
 })

@@ -2,7 +2,7 @@
 
 > **dsh-off-the-record** keeps your sessions, secrets, and searches off DeepSeek's record.
 
-**Status: 0.5.1.** Disable telemetry, private search, the secrets vault, status checks, and the settings page are ready.
+**Status: 0.6.0.** Disable telemetry, private search, the secrets vault, status checks, and the settings page are ready.
 
 A bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) with three parts, each of which can be turned off on its own:
 
@@ -17,13 +17,13 @@ The harness still keeps your session log on your machine, and the model provider
 Tested with DSH `0.2.1-rc.2`. The bundle also loads on later releases; when a release changes a row it manages, that override is skipped with a startup warning (`patch: entry … not found`) until the bundle is updated.
 
 ```sh
-dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.5.1
+dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.6.0
 ```
 
 Desktop users install with the `dsh` command that Desktop sets up (**Manage dsh Command… → Install**), into the Desktop profile:
 
 ```sh
-dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.5.1
+dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.6.0
 ```
 
 Watch the first start after installing or upgrading either the harness or this bundle. If the harness cannot load the bundle at all, it prints `dsh: skipping profile bundle "dsh-off-the-record"` and starts with every channel back on.
@@ -157,7 +157,17 @@ The key is sent only to `api.search.brave.com`; the endpoint cannot be changed.
 
 The model uses your secrets by name; their values stay out of the conversation, the session log, and model requests.
 
-Add a secret on the [settings page](#settings-page), or by editing the harness credential file, `~/.dsh/.credentials.yaml` (only your OS user can read it; the harness picks up changes immediately). Each secret is a record named `vault/` plus its name in lowercase, with `_` written as `-`:
+### Global and workspace secrets
+
+A secret is either **global**, available in every session, or belongs to one **workspace**: a project folder. A session can use the global secrets plus those of the workspace it was started in. In the Web UI and the Desktop app that is the workspace the session belongs to; from the CLI it is the folder you started `dsh` in. If both scopes have a secret with the same name, the workspace's is used, so `DB_URL` can mean the right database in every project.
+
+The workspace comes from the folder the session was *started* in. Changing directory during a session, or starting a subagent in another folder, does not give it another project's secrets. Workspace secrets are stored by folder: removing and re-adding a workspace keeps them, but moving or renaming the folder detaches them (the settings page still lists them under the old folder so you can remove them).
+
+Every stored value, in every scope, is hidden from every session's output.
+
+### Adding secrets
+
+Add a secret on the [settings page](#settings-page), choosing Global or a workspace. You can also add global secrets by editing the harness credential file, `~/.dsh/.credentials.yaml` (only your OS user can read it; the harness picks up changes immediately). Each is a record named `vault/` plus its name in lowercase, with `_` written as `-`:
 
 ```yaml
 version: 1
@@ -167,19 +177,21 @@ records:
     key: postgres://app:hunter2@db.internal/app
 ```
 
+Workspace secrets are best added on the settings page, because their record names include a hash of the folder.
+
 Names use capital letters, digits, and underscores, start with a letter, and cannot be ones that change how commands run (`PATH`, `HOME`, `LD_*`, `DSH_*`, and similar). Values must be at least 8 characters, so they can be recognized in output.
 
 The model gets three tools:
 
 | Tool | What it does |
 |---|---|
-| `list_secrets` | Lists names and whether you added the secret or it was generated. Never values. |
-| `create_secret` | Generates a random secret under a new name, such as a session key. The model never sees it. |
+| `list_secrets` | Lists the names it can use here, each marked global or workspace, and whether you added it or it was generated. Never values. |
+| `create_secret` | Generates a random secret under a new name, such as a session key, in this workspace (or globally, if asked). The model never sees it. |
 | `run_with_secrets` | Runs a bash command with the named secrets set as environment variables (`$DB_URL`). The value is never in the command text. It runs under the same sandbox as `bash`, and asks for approval the same way to widen it. |
 
 Every tool result, from any tool, has secret values replaced with `[secret:NAME]` before the model or the session log sees them. That covers the raw value and its base64, base64url, URL-encoded, and JSON-escaped forms. If redaction fails, the result is withheld.
 
-**What this does not protect against.** On this machine the agent could still read the vault deliberately, for example by opening `~/.dsh/.credentials.yaml`, or transform a value (reversing it, splitting it up) or send it over the network from a command. Run tools in an isolated box to prevent that. The vault is empty in one-shot `headless` runs, which have no credential store.
+**What this does not protect against.** On this machine the agent could still read the vault deliberately, for example by opening `~/.dsh/.credentials.yaml`, or transform a value (reversing it, splitting it up) or send it over the network from a command. Run tools in an isolated box to prevent that. Workspace scopes decide which secrets the model is offered and can use; they are not a wall between projects, since every scope is stored under your OS user. The vault is empty in one-shot `headless` runs, which have no credential store.
 
 ## Settings page
 
@@ -187,7 +199,7 @@ In the Web UI and the Desktop app, open **Plugins → dsh-off-the-record**:
 
 - **Telemetry**: a switch for each channel, with a dot that is red while the channel sends nothing to DeepSeek and green while it does. Session Logs and Desktop Usage Analytics switch live; Session Feedback and Session Plugin Inventory can only change in `cordis.patch.yml` with a restart, so their switches are locked, and the page names the file when something turned one on. **Rotate Installation ID at Start-up** is on by default.
 - **Web Search Provider**: SearXNG or Brave, with the selected provider's instance address or API key, shown as **Set** or **Not set**.
-- **Secrets vault**: your secrets by name, with **Add** and **Remove**. A value you type goes to the harness once and is never shown again.
+- **Secrets vault**: your secrets by name, grouped as Global and by workspace, with **Add** (choosing where the secret applies) and **Remove**. A value you type goes to the harness once and is never shown again.
 
 The page is in English and Chinese. The harness checks every change before applying it, and refuses an insecure SearXNG address, a reserved secret name, or a short value with the reason. Settings go to your profile's `cordis.patch.yml`; keys and secrets go to the credential store.
 

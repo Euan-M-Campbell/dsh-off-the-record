@@ -6,6 +6,7 @@ import { join, relative } from 'node:path'
 import type { MockLlmRequestRecord } from '@deepseek-ai/dsh-llm-mock-server'
 import { afterAll, describe, expect, it } from 'vitest'
 import { ALL_ENCODINGS, forms } from '../src/tool-vault/redact.ts'
+import { secretName, workspaceDirectory, workspaceRecordId } from '../src/vault/index.ts'
 import { cleanUp, runTask, writePatch } from './support/boot.ts'
 
 afterAll(cleanUp)
@@ -16,9 +17,22 @@ const leakForms = forms(SECRET, ALL_ENCODINGS).filter(form => form.length >= 8)
 // headless disables the credential store; the vault needs it.
 const withCredentials = writePatch('- id: credentials\n  disabled: false\n')
 
-function seedVault(_home: string, dshHome: string): void {
+const SHOP_TOKEN = 'shop-workspace-token-42'
+const OTHER_TOKEN = 'other-workspace-token-77'
+
+/** A global secret, one for the session's own workspace (the temporary home it runs in), and one for another directory. */
+function seedVault(home: string, dshHome: string): void {
   mkdirSync(dshHome, { recursive: true })
-  writeFileSync(join(dshHome, '.credentials.yaml'), `version: 1\nrecords:\n  vault/db-password:\n    kind: api-key\n    key: ${JSON.stringify(SECRET)}\n`, { mode: 0o600 })
+  const own = workspaceDirectory(home)
+  const other = workspaceDirectory(join(home, '..', 'some-other-project'))
+  const workspaceRecord = (directory: string, name: string, value: string) =>
+    `  vault-ws/${workspaceRecordId(directory as never, secretName(name))}:\n    kind: grant\n    payload:\n      value: ${JSON.stringify(value)}\n      origin: user\n      directory: ${JSON.stringify(directory)}\n`
+  writeFileSync(join(dshHome, '.credentials.yaml'), [
+    'version: 1\nrecords:\n',
+    `  vault/db-password:\n    kind: api-key\n    key: ${JSON.stringify(SECRET)}\n`,
+    workspaceRecord(own, 'SHOP_TOKEN', SHOP_TOKEN),
+    workspaceRecord(other, 'OTHER_TOKEN', OTHER_TOKEN),
+  ].join(''), { mode: 0o600 })
 }
 
 /** Every file under the harness home except the credential file that legitimately holds the value. */
@@ -125,13 +139,45 @@ describe('secrets vault, booted', { timeout: 300_000 }, () => {
   it('lists secrets by name only', async () => {
     const { requests } = await run(true, 'list_secrets', {})
     const sent = JSON.stringify(requests.map(request => request.body))
-    expect(sent).toContain('DB_PASSWORD (user)')
+    expect(sent).toContain('DB_PASSWORD (global, user)')
     expect(leaksIn(sent)).toEqual([])
   })
 
   it('refuses a secret that is not in the vault, naming it', async () => {
     const { requests } = await run(true, 'run_with_secrets', { description: 'Use a missing key', command: 'echo "$NOPE_KEY"', secrets: ['NOPE_KEY'] })
     expect(JSON.stringify(requests.map(request => request.body))).toContain('not in the vault: NOPE_KEY')
+  })
+})
+
+describe('workspace secrets, booted', { timeout: 300_000 }, () => {
+  const sent = (requests: readonly MockLlmRequestRecord[]) => JSON.stringify(requests.map(request => request.body))
+
+  it('uses the session\'s own workspace secrets and redacts them', async () => {
+    const command = windows ? 'Write-Output "token=$env:SHOP_TOKEN"' : 'echo "token=$SHOP_TOKEN"'
+    const { requests } = await run(true, 'run_with_secrets', { description: 'Use the shop token', command, secrets: ['SHOP_TOKEN'] })
+    expect(sent(requests)).toContain('token=[secret:SHOP_TOKEN]')
+    expect(sent(requests)).not.toContain(SHOP_TOKEN)
+  })
+
+  it('lists the global and own-workspace secrets, not another workspace\'s', async () => {
+    const { requests } = await run(true, 'list_secrets', {})
+    expect(sent(requests)).toContain('DB_PASSWORD (global, user)')
+    expect(sent(requests)).toContain('SHOP_TOKEN (workspace, user)')
+    expect(sent(requests)).not.toContain('OTHER_TOKEN')
+  })
+
+  it('refuses another workspace\'s secret', async () => {
+    const command = windows ? 'Write-Output $env:OTHER_TOKEN' : 'echo "$OTHER_TOKEN"'
+    const { requests } = await run(true, 'run_with_secrets', { description: 'Use another project token', command, secrets: ['OTHER_TOKEN'] })
+    expect(sent(requests)).toContain('not in the vault: OTHER_TOKEN')
+  })
+
+  it('still redacts another workspace\'s value wherever it appears', async () => {
+    const { requests } = await run(true, shellTool, { description: 'Show the env file', command: printEnvFile }, (home) => {
+      writeFileSync(join(home, 'app.env'), `OTHER=${OTHER_TOKEN}\n`)
+    })
+    expect(sent(requests)).toContain('OTHER=[secret:OTHER_TOKEN]')
+    expect(sent(requests)).not.toContain(OTHER_TOKEN)
   })
 })
 

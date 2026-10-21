@@ -19,7 +19,7 @@ export type OffTheRecordLocaleKey =
   | 'searxngUrl' | 'save' | 'braveKey' | 'set' | 'notSet' | 'remove'
  
   | 'vaultTitle' | 'vaultUnavailable' | 'secretName' | 'secretValue'
-  | 'add' | 'originUser' | 'originGenerated'
+  | 'add' | 'originUser' | 'originGenerated' | 'scopeGlobal' | 'secretScope' | 'workspaceRemoved'
   | 'settingsUnavailable'
 
 export const en: Record<OffTheRecordLocaleKey, string> = {
@@ -58,6 +58,9 @@ export const en: Record<OffTheRecordLocaleKey, string> = {
   secretName: 'Name',
   secretValue: 'Value',
   add: 'Add',
+  scopeGlobal: 'Global',
+  secretScope: 'Where the secret applies',
+  workspaceRemoved: 'no longer a workspace',
   originUser: 'added by you',
   originGenerated: 'generated',
   settingsUnavailable: 'Live changes are unavailable in this profile; edit cordis.patch.yml instead.',
@@ -99,6 +102,9 @@ export const zh: Record<OffTheRecordLocaleKey, string> = {
   secretName: '名称',
   secretValue: '值',
   add: '添加',
+  scopeGlobal: '全局',
+  secretScope: '密钥的适用范围',
+  workspaceRemoved: '已不是工作区',
   originUser: '由你添加',
   originGenerated: '自动生成',
   settingsUnavailable: '此配置无法实时更改，请改为编辑 cordis.patch.yml。',

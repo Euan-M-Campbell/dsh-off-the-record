@@ -170,16 +170,36 @@ function Search({ t, status, busy, face }: { t: T; status: Status; busy: boolean
   )
 }
 
+function SecretRow({ t, secret, busy, writable, face }: { t: T; secret: Status['vault']['secrets'][number]; busy: boolean; writable: boolean; face: Actions }) {
+  return (
+    <div style={{ ...row, justifyContent: 'space-between' }}>
+      <span style={row}><code>{secret.name}</code><Tag>{t(secret.origin === 'user' ? 'originUser' : 'originGenerated')}</Tag></span>
+      <Button size="sm" variant="ghost" disabled={busy || !writable} onClick={() => { face.setSecret(secret.name, '', secret.directory ?? '') }}>{t('remove')}</Button>
+    </div>
+  )
+}
+
+const selectStyle: CSSProperties = { font: 'inherit', color: 'inherit', background: 'transparent', border: '1px solid currentColor', borderRadius: 6, padding: '4px 6px', opacity: 0.85 }
+
 function Vault({ t, status, busy, face }: { t: T; status: Status; busy: boolean; face: Actions }) {
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
+  const [scope, setScope] = useState('')
   const { vault } = status
+  const global = vault.secrets.filter(secret => secret.directory === undefined)
+  const groups = vault.workspaces
+    .map(workspace => ({ workspace, secrets: vault.secrets.filter(secret => secret.directory === workspace.directory) }))
+    .filter(group => group.secrets.length > 0)
   return (
     <Section title={t('vaultTitle')}>
-      {vault.secrets.map(secret => (
-        <div key={secret.name} style={{ ...row, justifyContent: 'space-between' }}>
-          <span style={row}><code>{secret.name}</code><Tag>{t(secret.origin === 'user' ? 'originUser' : 'originGenerated')}</Tag></span>
-          <Button size="sm" variant="ghost" disabled={busy || !vault.writable} onClick={() => { face.setSecret(secret.name, '') }}>{t('remove')}</Button>
+      {global.length > 0 && <span style={muted}>{t('scopeGlobal')}</span>}
+      {global.map(secret => <SecretRow key={secret.name} t={t} secret={secret} busy={busy} writable={vault.writable} face={face} />)}
+      {groups.map(({ workspace, secrets }) => (
+        <div key={workspace.directory} style={column}>
+          <span style={muted} title={workspace.directory}>
+            {workspace.title}{workspace.registered ? '' : ` · ${t('workspaceRemoved')}`}
+          </span>
+          {secrets.map(secret => <SecretRow key={secret.name} t={t} secret={secret} busy={busy} writable={vault.writable} face={face} />)}
         </div>
       ))}
       {vault.writable
@@ -189,8 +209,12 @@ function Vault({ t, status, busy, face }: { t: T; status: Status; busy: boolean;
                 onChange={(event) => { setName(event.target.value.toUpperCase()) }} />
               <Input type="password" autoComplete="off" value={value} aria-label={t('secretValue')} disabled={busy}
                 onChange={(event) => { setValue(event.target.value) }} />
+              <select aria-label={t('secretScope')} value={scope} disabled={busy} style={selectStyle} onChange={(event) => { setScope(event.target.value) }}>
+                <option value="">{t('scopeGlobal')}</option>
+                {vault.workspaces.map(workspace => <option key={workspace.directory} value={workspace.directory}>{workspace.title}</option>)}
+              </select>
               <Button size="sm" variant="outline" disabled={busy || name.length === 0 || value.length === 0}
-                onClick={() => { face.setSecret(name, value); setValue('') }}>{t('add')}</Button>
+                onClick={() => { face.setSecret(name, value, scope); setValue('') }}>{t('add')}</Button>
             </span>
           )
         : <p style={muted}>{t('vaultUnavailable')}</p>}

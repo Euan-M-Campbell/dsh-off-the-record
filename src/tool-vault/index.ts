@@ -19,12 +19,14 @@ import type {} from '@deepseek-ai/dsh-shell-env'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import { secretName, secretNameProblem, type SecretAlphabet, type SecretName } from '../vault/index.ts'
+import { sessionWorkspace } from './scope.ts'
 import { redactDecision, WITHHELD } from './decision.ts'
 import { ALL_ENCODINGS, buildMatcher, redactJson, type Matcher, type RedactEncoding } from './redact.ts'
 
 export { buildMatcher, forms, redactJson, jsonMatches, base64Cores } from './redact.ts'
 export type { Matcher, RedactEncoding } from './redact.ts'
 export { redactDecision } from './decision.ts'
+export { sessionWorkspace } from './scope.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'otr-tool-vault'
@@ -49,9 +51,10 @@ export const Config: z<Config> = z.object({
 
 /** Tool descriptions, written for the model. Tests pin them verbatim. */
 export const DESCRIPTIONS = {
-  list_secrets: 'List the secrets the user has stored in the vault, by name. Values are never shown. '
-    + 'Use a listed name with run_with_secrets to pass its value to a command.',
+  list_secrets: 'List the secrets you can use here, by name: global ones, and this workspace\'s own, which replace global ones of the same name. '
+    + 'Values are never shown. Use a listed name with run_with_secrets to pass its value to a command.',
   create_secret: 'Generate a new random secret and store it in the vault under a new name, for example a session key or a password for a local service. '
+    + 'It belongs to this workspace unless you set scope to global. '
     + 'You never see the value. You cannot store a value you supply: ask the user to add secrets they already have.',
   run_with_secrets: 'Run a bash command with vault secrets set as environment variables. Name the secrets in `secrets`; '
     + 'refer to them in the command as $NAME, never by value. Runs like bash, in a fresh shell under the same sandbox. '
@@ -70,6 +73,7 @@ const SECRET_INFO_SCHEMA = {
   properties: {
     name: { type: 'string', required: true },
     origin: { type: 'string', enum: ['user', 'generated'], required: true },
+    scope: { type: 'string', enum: ['global', 'workspace'], required: true },
   },
 } as const
 
@@ -133,6 +137,11 @@ export function renderCommand(outcome: CommandOutcome, escalation: boolean): str
  * @param config - validated configuration.
  */
 export function apply(ctx: Context, config: Config): void {
+  /** The calling session's workspace; undefined means global secrets only. */
+  const workspaceOf = (exec: ToolExecution) => sessionWorkspace(
+    exec.agent?.session,
+    ctx.get('sessions'),
+  )
   let matcher: Matcher = buildMatcher([], config.redactEncodings, config.minRedactLength)
   const rebuild = (): void => { matcher = buildMatcher(ctx.vault.redactionEntries(), config.redactEncodings, config.minRedactLength) }
   rebuild()
@@ -169,10 +178,12 @@ export function apply(ctx: Context, config: Config): void {
         type: 'text',
         text: value.secrets.length === 0
           ? 'The vault is empty. The user adds secrets outside the conversation.'
-          : value.secrets.map(secret => `${secret.name} (${secret.origin})`).join('\n'),
+          : value.secrets.map(secret => `${secret.name} (${secret.scope}, ${secret.origin})`).join('\n'),
       }],
     },
-    execute: async () => ({ secrets: (await ctx.vault.list()).map(({ name: secret, origin }) => ({ name: secret, origin })) }),
+    execute: async (_args, exec) => ({
+      secrets: (await ctx.vault.list(workspaceOf(exec))).map(({ name: secret, origin, scope }) => ({ name: secret, origin, scope })),
+    }),
   }))
 
   ctx.tools.register(defineTool({
@@ -182,6 +193,7 @@ export function apply(ctx: Context, config: Config): void {
       name: { type: 'string', required: true, description: 'The new secret\'s name: capital letters, digits, and underscores, starting with a letter, such as SESSION_KEY.' },
       length: { type: 'integer', description: `Number of characters, from 16 to 256. Defaults to ${String(config.generateLength)}.` },
       alphabet: { type: 'string', enum: ['hex', 'base64url', 'alphanumeric'], description: 'Characters to draw from. Defaults to alphanumeric.' },
+      scope: { type: 'string', enum: ['workspace', 'global'], description: 'workspace (the default) keeps it to this project; global makes it available everywhere.' },
     },
     output: {
       schema: {
@@ -191,21 +203,25 @@ export function apply(ctx: Context, config: Config): void {
           name: { type: 'string', required: true },
           length: { type: 'integer', required: true },
           alphabet: { type: 'string', required: true },
+          scope: { type: 'string', enum: ['global', 'workspace'], required: true },
         },
       },
       render: (_args, value): ContentBlock[] => [{
         type: 'text',
-        text: `Created ${value.name} (${String(value.length)} ${value.alphabet} characters). Pass it to a command with run_with_secrets as $${value.name}.`,
+        text: `Created ${value.name} (${value.scope}, ${String(value.length)} ${value.alphabet} characters). Pass it to a command with run_with_secrets as $${value.name}.`,
       }],
     },
-    execute: async (args) => {
+    execute: async (args, exec) => {
       const problem = secretNameProblem(args.name)
       if (problem !== undefined) throw new Error(problem)
       const length = args.length ?? config.generateLength
       if (length < 16 || length > 256) throw new Error(`length must be from 16 to 256, got ${String(length)}`)
       const alphabet: SecretAlphabet = args.alphabet ?? 'alphanumeric'
-      await ctx.vault.generate(secretName(args.name), { length, alphabet })
-      return { name: args.name, length, alphabet }
+      const workspace = workspaceOf(exec)
+      const scope = args.scope ?? (workspace === undefined ? 'global' : 'workspace')
+      if (scope === 'workspace' && workspace === undefined) throw new Error('this session has no workspace directory; create a global secret instead')
+      await ctx.vault.generate(secretName(args.name), { length, alphabet }, scope === 'workspace' ? workspace : undefined)
+      return { name: args.name, length, alphabet, scope }
     },
   }))
 
@@ -263,7 +279,7 @@ export function apply(ctx: Context, config: Config): void {
         if (names.length === 0) throw new Error(`name at least one secret in \`secrets\`; use ${POWERSHELL ? 'pwsh' : 'bash'} for commands that need none`)
         const invalid = names.map(secretNameProblem).filter((problem): problem is string => problem !== undefined)
         if (invalid.length > 0) throw new Error(invalid.join('; '))
-        const values = await ctx.vault.resolveForExecution(names.map(entry => entry as SecretName))
+        const values = await ctx.vault.resolveForExecution(names.map(entry => entry as SecretName), workspaceOf(exec))
 
         const standing = standingPolicy(exec)
         const permissions = (args as { sandbox_permissions?: string }).sandbox_permissions

@@ -30,7 +30,21 @@ const STATUS: PageStatus = {
   liveChannels: ['session-log-deepseek'],
   searxng: { baseURL: 'http://127.0.0.1:8888' },
   brave: { keyConfigured: true, keyWritable: true },
-  vault: { available: true, writable: true, secrets: [{ name: secretName('DB_URL'), origin: 'user' }, { name: secretName('SESSION_KEY'), origin: 'generated' }] },
+  vault: {
+    available: true,
+    writable: true,
+    secrets: [
+      { name: secretName('DB_URL'), origin: 'user', scope: 'global' },
+      { name: secretName('SESSION_KEY'), origin: 'generated', scope: 'global' },
+      { name: secretName('DB_URL'), origin: 'user', scope: 'workspace', directory: '/work/shop' },
+      { name: secretName('OLD_TOKEN'), origin: 'user', scope: 'workspace', directory: '/work/old' },
+    ],
+    workspaces: [
+      { directory: '/work/shop', title: 'Shop', registered: true },
+      { directory: '/work/blog', title: 'Blog', registered: true },
+      { directory: '/work/old', title: 'old', registered: false },
+    ],
+  },
 }
 
 // Plain stand-ins for the shell's primitives; they keep the props the page passes.
@@ -163,6 +177,18 @@ describe('client bundle', () => {
     expect(unset).toContain(`>${en.notSet}<`)
   })
 
+  it('groups secrets as global and per workspace, and offers every workspace as a scope', async () => {
+    const html = (await mountPage()).render('page')
+    const order = ['Global', 'SESSION_KEY', 'Shop', 'old · no longer a workspace', 'OLD_TOKEN'].map(text => html.indexOf(text))
+    expect(order.every(index => index >= 0)).toBe(true)
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+    // A workspace with no secrets gets no heading, but can be chosen as a scope.
+    expect(html).not.toContain('>Blog</span>')
+    expect([...html.matchAll(/<option value="([^"]*)"[^>]*>([^<]+)<\/option>/g)].map(match => [match[1], match[2]])).toEqual([
+      ['', 'Global'], ['/work/shop', 'Shop'], ['/work/blog', 'Blog'], ['/work/old', 'old'],
+    ])
+  })
+
   it('shows the Brave key, not the SearXNG address, when Brave is selected', async () => {
     const { render } = await mountPage({ search: { provider: 'brave', fetchProvider: 'http', private: true } })
     const html = render('page')
@@ -172,7 +198,7 @@ describe('client bundle', () => {
   })
 
   it('explains an unavailable vault and a non-private search provider', async () => {
-    const { render } = await mountPage({ vault: { available: true, writable: false, secrets: [] }, search: { provider: 'deepseek-search-api', fetchProvider: 'deepseek-fetch-api', private: false } })
+    const { render } = await mountPage({ vault: { available: true, writable: false, secrets: [], workspaces: [] }, search: { provider: 'deepseek-search-api', fetchProvider: 'deepseek-fetch-api', private: false } })
     const html = render('page')
     expect(html).toContain(en.vaultUnavailable)
     expect(html).toContain('Search is set to &quot;deepseek-search-api&quot;, which is not private.')
@@ -218,14 +244,14 @@ describe('client bundle', () => {
     await vi.waitFor(() => { expect(calls).toHaveLength(1) })
     act.setSearchProvider?.('brave')
     await vi.waitFor(() => { expect(calls).toHaveLength(2) })
-    act.setSecret?.('NEW_KEY', 'new-value-123')
+    act.setSecret?.('NEW_KEY', 'new-value-123', '/work/shop')
     await vi.waitFor(() => { expect(calls).toHaveLength(3) })
     act.setNewIdEachStart?.(false)
     await vi.waitFor(() => { expect(calls).toHaveLength(4) })
     expect(calls).toEqual([
       ['setChannel', ['session-log-deepseek', true]],
       ['setSearchProvider', ['brave']],
-      ['setSecret', ['NEW_KEY', 'new-value-123']],
+      ['setSecret', ['NEW_KEY', 'new-value-123', '/work/shop']],
       ['setNewIdEachStart', [false]],
     ])
   })
