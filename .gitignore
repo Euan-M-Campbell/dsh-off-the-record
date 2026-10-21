@@ -1,0 +1,8 @@
+node_modules/
+coverage/
+*.tsbuildinfo
+# Built output is committed only on release branches and tags (git add -f lib).
+lib/
+# Local planning notes, kept out of the repository.
+docs/
+CLAUDE.md

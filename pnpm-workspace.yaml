@@ -1,0 +1,9 @@
+# pnpm 11 refuses any dependency with an unreviewed install script. These come
+# from the harness packages pulled in as devDependencies for composition tests,
+# which read patch files and schemas and never need the native builds.
+allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local': false
+  '@google/genai': false
+  koffi: false
+  node-pty: false
+  protobufjs: false

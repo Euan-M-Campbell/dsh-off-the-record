@@ -1,0 +1,50 @@
+{
+  "name": "dsh-off-the-record",
+  "description": "Keeps your DeepSeek Harness sessions, secrets, and searches off DeepSeek's record",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-rc.2"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "patches"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./patches/disable-telemetry.patch.yml",
+        "./patches/private-search.patch.yml",
+        "./patches/secrets-vault.patch.yml"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis-plugin-include": "1.0.10",
+    "@deepseek-ai/dsh": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-base": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm-mock-server": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-web-app": "0.2.1-rc.2",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.20.1",
+    "js-yaml": "^4.3.2",
+    "oxlint": "1.81.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

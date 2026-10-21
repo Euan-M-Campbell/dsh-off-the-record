@@ -1,0 +1,31 @@
+# Disable telemetry: turns off every harness channel that sends session logs,
+# usage analytics, or plugin lists to DeepSeek. A row override replaces the
+# row's whole config, so each one restates every key the row needs in the
+# supported harness release; tests/disable-telemetry.spec.ts fails if a
+# release adds a key an override does not restate. Re-enable a channel by
+# overriding the same row in a later layer, such as the profile's
+# cordis.patch.yml.
+
+# Feedback session upload. DISABLED builds no exporter and reads no other key,
+# so the shipped exporter, processor, and size limits are dropped on purpose.
+# Feedback still records in the local session log.
+- id: session-telemetry-otel
+  config:
+    mode: DISABLED
+
+# Session-log suffix in the dsh_session_log field of DeepSeek API requests.
+- id: session-log-deepseek
+  config:
+    enabled: false
+
+# Active plugin package list in the dsh_plugin_packages field of DeepSeek API requests.
+- id: plugin-package-inventory-deepseek
+  config:
+    enabled: false
+
+# Desktop usage analytics. Row config is the only switch: the plugin has no
+# settings surface. Restates the shipped appVersion.
+- id: product-analytics
+  config:
+    enabled: false
+    appVersion: !!js process.env.DSH_CLIENT_VERSION
