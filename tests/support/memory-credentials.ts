@@ -1,9 +1,10 @@
-// In-memory credential store for plugin tests: references only, no ambient layers.
+// In-memory credential store for plugin tests: references and records, no ambient layers.
 import type { Context } from '@deepseek-ai/cordis'
 import CredentialProvider, { type CredentialInfo, type CredentialKey, type CredentialRecord, type CredentialRef, type ResolvedCredential } from '@deepseek-ai/dsh-credentials'
 
 export class MemoryCredentials extends CredentialProvider {
   readonly values = new Map<string, string>()
+  readonly records = new Map<string, CredentialRecord>()
 
   constructor(ctx: Context) {
     super(ctx)
@@ -30,11 +31,31 @@ export class MemoryCredentials extends CredentialProvider {
     return Promise.resolve()
   }
 
-  override readRecord(_key: CredentialKey): Promise<CredentialRecord | undefined> { return Promise.resolve(undefined) }
-  override describeRecord(_key: CredentialKey) { return Promise.resolve({ configured: false, writable: true }) }
-  override listRecords() { return Promise.resolve([]) }
-  override modifyRecord(_key: CredentialKey, _mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>) {
-    return Promise.resolve(undefined)
+  override readRecord(key: CredentialKey): Promise<CredentialRecord | undefined> { return Promise.resolve(this.records.get(key)) }
+  override describeRecord(key: CredentialKey) {
+    const record = this.records.get(key)
+    return Promise.resolve(record === undefined ? { configured: false, writable: true } : { configured: true, kind: record.kind, writable: true })
   }
-  override deleteRecord(_key: CredentialKey): Promise<void> { return Promise.resolve() }
+  override listRecords() {
+    return Promise.resolve([...this.records].map(([key, record]) => ({ key: key as CredentialKey, kind: record.kind })))
+  }
+  override async modifyRecord(key: CredentialKey, mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>) {
+    const next = await mutate(this.records.get(key))
+    if (next === undefined) return this.records.get(key)
+    this.records.set(key, next)
+    this.notifyRecordUpdated(key)
+    return next
+  }
+  override deleteRecord(key: CredentialKey): Promise<void> {
+    this.records.delete(key)
+    this.notifyRecordUpdated(key)
+    return Promise.resolve()
+  }
+
+  /** Simulate a hand edit of the credential file. */
+  editRecord(key: string, record: CredentialRecord | undefined): void {
+    if (record === undefined) this.records.delete(key)
+    else this.records.set(key, record)
+    this.notifyRecordUpdated(key as CredentialKey)
+  }
 }

@@ -68,6 +68,11 @@ export function apply(ctx: Context, config: Config): void {
     refresh().catch((error: unknown) => { ctx.logger.warn('could not read the Brave API key state: %s', String(error)) })
   }
   refreshQuietly()
+  // The credential store may start after this row: refresh when it arrives and when it leaves.
+  ctx.inject(['credentials'], (storeCtx) => {
+    refreshQuietly()
+    storeCtx.effect(() => () => { refreshQuietly() })
+  })
   ctx.on('credentials/reference-updated', (ref) => { if (ref === config.apiKeyEnv.get()) refreshQuietly() })
   ctx.on('loader/volatile-update', refreshQuietly)
 

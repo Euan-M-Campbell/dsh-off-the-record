@@ -2,7 +2,7 @@
 
 > **dsh-off-the-record** keeps your sessions, secrets, and searches off DeepSeek's record.
 
-**Status: 0.3.0.** Disable telemetry, private search, and status checks are ready; the secrets vault and the settings page are in progress.
+**Status: 0.4.0.** Disable telemetry, private search, the secrets vault, and status checks are ready; the settings page is in progress.
 
 A bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) with three parts, each of which can be turned off on its own:
 
@@ -17,13 +17,13 @@ The harness still keeps your session log on your machine, and the model provider
 Tested with DSH `0.2.1-rc.2`. The bundle also loads on later releases; when a release changes a row it manages, that override is skipped with a startup warning (`patch: entry … not found`) until the bundle is updated.
 
 ```sh
-dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.3.0
+dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.4.0
 ```
 
 Desktop users install with the `dsh` command that Desktop sets up (**Manage dsh Command… → Install**), into the Desktop profile:
 
 ```sh
-dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.3.0
+dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.4.0
 ```
 
 Watch the first start after installing or upgrading either the harness or this bundle. If the harness cannot load the bundle at all, it prints `dsh: skipping profile bundle "dsh-off-the-record"` and starts with every channel back on.
@@ -146,6 +146,34 @@ Brave Search's API needs a key, and a card on file even for the free monthly cre
    ```
 
 The key is sent only to `api.search.brave.com`; the endpoint cannot be changed.
+
+## Secrets vault
+
+The model uses your secrets by name; their values stay out of the conversation, the session log, and model requests.
+
+Add a secret by editing the harness credential file, `~/.dsh/.credentials.yaml` (only your OS user can read it; the harness picks up changes immediately). Each secret is a record named `vault/` plus its name in lowercase, with `_` written as `-`:
+
+```yaml
+version: 1
+records:
+  vault/db-url:            # the secret DB_URL
+    kind: api-key
+    key: postgres://app:hunter2@db.internal/app
+```
+
+Names use capital letters, digits, and underscores, start with a letter, and cannot be ones that change how commands run (`PATH`, `HOME`, `LD_*`, `DSH_*`, and similar). Values must be at least 8 characters, so they can be recognized in output.
+
+The model gets three tools:
+
+| Tool | What it does |
+|---|---|
+| `list_secrets` | Lists names and whether you added the secret or it was generated. Never values. |
+| `create_secret` | Generates a random secret under a new name, such as a session key. The model never sees it. |
+| `run_with_secrets` | Runs a bash command with the named secrets set as environment variables (`$DB_URL`). The value is never in the command text. It runs under the same sandbox as `bash`, and asks for approval the same way to widen it. |
+
+Every tool result, from any tool, has secret values replaced with `[secret:NAME]` before the model or the session log sees them. That covers the raw value and its base64, base64url, URL-encoded, and JSON-escaped forms. If redaction fails, the result is withheld.
+
+**What this does not protect against.** On this machine the agent could still read the vault deliberately, for example by opening `~/.dsh/.credentials.yaml`, or transform a value (reversing it, splitting it up) or send it over the network from a command. Run tools in an isolated box to prevent that. The vault is empty in one-shot `headless` runs, which have no credential store.
 
 ## Status checks
 

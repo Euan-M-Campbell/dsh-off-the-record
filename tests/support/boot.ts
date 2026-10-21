@@ -45,6 +45,10 @@ export interface TaskOptions {
   readonly model?: Partial<MockLlmServerOptions>
   /** Receives the task run's stdout and stderr. */
   readonly onOutput?: (output: { readonly stdout: string; readonly stderr: string }) => void
+  /** Runs before the harness starts, with the temporary home (the cwd) and its DSH_HOME. */
+  readonly prepareHome?: (home: string, dshHome: string) => void
+  /** Runs after the task, before cleanup. */
+  readonly inspectHome?: (home: string, dshHome: string) => void
 }
 
 /**
@@ -70,11 +74,13 @@ export async function runTask(patches: readonly string[], options: TaskOptions =
     },
   })
   try {
+    options.prepareHome?.(home, join(home, '.dsh'))
     if (options.bundle !== undefined && options.bundle !== false) {
       await run(['plugin', '--profile', 'headless', 'add', options.bundle === true ? root : options.bundle])
     }
     const output = await run(['--profile', 'headless', ...patches.flatMap(patch => ['--patch', patch]), options.task ?? 'Reply with the word done.'])
     options.onOutput?.(output)
+    options.inspectHome?.(home, join(home, '.dsh'))
     return [...server.requests]
   } finally {
     await server.close()
