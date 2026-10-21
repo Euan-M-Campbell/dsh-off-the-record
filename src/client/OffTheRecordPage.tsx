@@ -28,11 +28,11 @@ const row: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, flex
 const muted: CSSProperties = { opacity: 0.7, fontSize: '0.9em', margin: 0 }
 const section: CSSProperties = { ...column, paddingTop: 16 }
 
-function Section({ title, promise, children }: { title: string; promise: string; children: ReactNode }) {
+function Section({ title, promise, children }: { title: string; promise?: string; children: ReactNode }) {
   return (
     <section style={section}>
       <h3 style={{ margin: 0 }}>{title}</h3>
-      <p style={muted}>{promise}</p>
+      {promise !== undefined && <p style={muted}>{promise}</p>}
       {children}
     </section>
   )
@@ -47,32 +47,55 @@ function summary(t: T, status: Status): string {
   })
 }
 
-function stateTag(t: T, channel: Channel) {
-  const dot = channel.state === 'off' ? 'done' : channel.state === 'on' ? 'warning' : channel.state === 'missing' ? 'error' : 'idle'
-  const label = channel.state === 'off' ? t('stateOff') : channel.state === 'on' ? t('stateOn') : channel.state === 'missing' ? t('stateMissing') : t('stateNotPresent')
-  return <span style={row}><StateDot state={dot} />{label}</span>
+/** A setting's control: a dot (green on, red off) that follows the switch, then the switch. */
+function Toggle({ on, label, disabled, title, onChange }: {
+  on: boolean
+  label: string
+  disabled: boolean
+  title?: string | undefined
+  onChange: (next: boolean) => void
+}) {
+  return (
+    <span style={row}>
+      <StateDot state={on ? 'done' : 'error'} />
+      <Switch checked={on} label={label} disabled={disabled} title={title} onChange={onChange} />
+    </span>
+  )
 }
 
-function ChannelRow({ t, channel, live, busy, onKeepOff, onToggle }: {
+/** One labelled row with a toggle, and optional notes under the label. */
+function ToggleRow({ label, toggle, children }: { label: string; toggle: ReactNode; children?: ReactNode }) {
+  return (
+    <div style={column}>
+      <div style={{ ...row, justifyContent: 'space-between' }}>
+        <span>{label}</span>
+        {toggle}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * One channel; its switch is on while the channel sends to DeepSeek. A channel
+ * that cannot change live keeps its switch, locked, and says where to change it.
+ */
+function ChannelRow({ t, channel, live, busy, onSet }: {
   t: T
   channel: Channel
   live: boolean
   busy: boolean
-  onKeepOff: (off: boolean) => void
-  onToggle: boolean
+  onSet: (on: boolean) => void
 }) {
+  const on = channel.state === 'on'
+  const absent = channel.state === 'not-present' || channel.state === 'missing'
+  const label = t(`channel.${channel.id}` as OffTheRecordLocaleKey)
   return (
-    <div style={column}>
-      <div style={{ ...row, justifyContent: 'space-between' }}>
-        <span>{t(`channel.${channel.id}` as OffTheRecordLocaleKey)}</span>
-        <span style={row}>
-          {stateTag(t, channel)}
-          {live && onToggle && (
-            <Switch checked={channel.state === 'off'} label={t('keepOff')} disabled={busy} onChange={(next) => { onKeepOff(next) }} />
-          )}
-        </span>
-      </div>
-      {channel.state === 'on' && (
+    <ToggleRow label={label} toggle={(
+      <Toggle on={on} label={label} disabled={busy || !live || absent} title={live ? undefined : t('notLive')} onChange={onSet} />
+    )}>
+      {absent && <p style={muted}>{t(channel.state === 'missing' ? 'stateMissing' : 'stateNotPresent')}</p>}
+      {on && (
         <p style={muted}>
           {channel.changedBy === undefined ? t('changedByUnknown') : t('changedBy', { layer: channel.changedBy })}
           {' '}
@@ -80,27 +103,24 @@ function ChannelRow({ t, channel, live, busy, onKeepOff, onToggle }: {
         </p>
       )}
       {channel.state === 'missing' && channel.fix !== undefined && <p style={muted}>{channel.fix}</p>}
-    </div>
+    </ToggleRow>
   )
 }
 
 function Telemetry({ t, status, busy, face }: { t: T; status: Status; busy: boolean; face: Actions }) {
   const channels = status.channels.filter(channel => channel.part === 'telemetry')
   return (
-    <Section title={t('telemetryTitle')} promise={t('telemetryPromise')}>
+    <Section title={t('telemetryTitle')}>
       {channels.map(channel => (
         <ChannelRow key={channel.id} t={t} channel={channel} busy={busy}
-          live={status.settingsAvailable && status.liveChannels.includes(channel.id)} onToggle
-          onKeepOff={(off) => { face.setChannel(channel.id, off) }} />
+          live={status.settingsAvailable && status.liveChannels.includes(channel.id)}
+          onSet={(on) => { face.setChannel(channel.id, !on) }} />
       ))}
       {status.telemetryEnvBackstop && <p style={muted}>{t('backstop')}</p>}
-      <div style={{ ...row, justifyContent: 'space-between' }}>
-        <span style={column}>
-          <span>{t('anonymousId')}</span>
-          <span style={muted}>{t('anonymousIdHint')}</span>
-        </span>
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => { face.resetAnonymousId() }}>{t('resetId')}</Button>
-      </div>
+      <ToggleRow label={t('newIdEachStart')} toggle={(
+        <Toggle on={status.newIdEachStart} label={t('newIdEachStart')} disabled={busy || !status.settingsAvailable}
+          onChange={(next) => { face.setNewIdEachStart(next) }} />
+      )} />
     </Section>
   )
 }
@@ -109,10 +129,9 @@ function Search({ t, status, busy, face }: { t: T; status: Status; busy: boolean
   const [url, setUrl] = useState(status.searxng.baseURL)
   const [key, setKey] = useState('')
   const provider = status.search.provider
-  const deepseekRows = status.channels.filter(channel => channel.part === 'search')
   const editable = status.settingsAvailable
   return (
-    <Section title={t('searchTitle')} promise={t('searchPromise')}>
+    <Section title={t('searchTitle')}>
       <div style={row}>
         <span>{t('provider')}</span>
         {(['searxng', 'brave'] as const).map(id => (
@@ -123,34 +142,30 @@ function Search({ t, status, busy, face }: { t: T; status: Status; busy: boolean
         ))}
       </div>
       {!status.search.private && <p style={muted}>{t('notPrivate', { provider: provider || '—' })}</p>}
-      <label style={column}>
+      {provider !== 'brave' && (
+      <label style={row}>
         <span>{t('searxngUrl')}</span>
-        <span style={row}>
-          <Input value={url} placeholder="http://127.0.0.1:8888" disabled={busy || !editable} onChange={(event) => { setUrl(event.target.value) }} />
-          <Button size="sm" variant="outline" disabled={busy || !editable || url === status.searxng.baseURL} onClick={() => { face.setSearxngUrl(url) }}>{t('save')}</Button>
+        <Input value={url} placeholder="http://127.0.0.1:8888" disabled={busy || !editable} onChange={(event) => { setUrl(event.target.value) }} />
+        <Button size="sm" variant="outline" disabled={busy || !editable || url === status.searxng.baseURL} onClick={() => { face.setSearxngUrl(url) }}>{t('save')}</Button>
+        <span style={muted}>
+          {status.searxng.baseURL.length === 0 ? t('notSet') : status.searxng.problem ?? t('set')}
         </span>
-        <span style={muted}>{status.searxng.baseURL.length > 0 && status.searxng.problem !== undefined ? status.searxng.problem : t('searxngUrlHint')}</span>
+        {status.searxng.baseURL.length > 0 && (
+          <Button size="sm" variant="ghost" disabled={busy || !editable} onClick={() => { face.setSearxngUrl('') }}>{t('remove')}</Button>
+        )}
       </label>
-      <label style={column}>
+      )}
+      {provider === 'brave' && (
+      <label style={row}>
         <span>{t('braveKey')}</span>
-        <span style={row}>
-          <Input type="password" autoComplete="off" value={key} disabled={busy || !status.brave.keyWritable} onChange={(event) => { setKey(event.target.value) }} />
-          <Button size="sm" variant="outline" disabled={busy || key.trim().length === 0} onClick={() => { face.setBraveKey(key); setKey('') }}>{t('save')}</Button>
-          {status.brave.keyConfigured && (
-            <Button size="sm" variant="ghost" disabled={busy || !status.brave.keyWritable} onClick={() => { face.setBraveKey('') }}>{t('remove')}</Button>
-          )}
-        </span>
-        <span style={muted}>{status.brave.keyConfigured ? t('braveKeySet') : t('braveKeyUnset')} {t('braveKeyHint')}</span>
+        <Input type="password" autoComplete="off" value={key} disabled={busy || !status.brave.keyWritable} onChange={(event) => { setKey(event.target.value) }} />
+        <Button size="sm" variant="outline" disabled={busy || key.trim().length === 0} onClick={() => { face.setBraveKey(key); setKey('') }}>{t('save')}</Button>
+        <span style={muted}>{status.brave.keyConfigured ? t('set') : t('notSet')}</span>
+        {status.brave.keyConfigured && (
+          <Button size="sm" variant="ghost" disabled={busy || !status.brave.keyWritable} onClick={() => { face.setBraveKey('') }}>{t('remove')}</Button>
+        )}
       </label>
-      <div style={column}>
-        <span>{t('deepseekProviders')}</span>
-        {deepseekRows.map(channel => (
-          <div key={channel.id} style={{ ...row, justifyContent: 'space-between' }}>
-            <span style={muted}>{t(`channel.${channel.id}` as OffTheRecordLocaleKey)}</span>
-            {stateTag(t, channel)}
-          </div>
-        ))}
-      </div>
+      )}
     </Section>
   )
 }
@@ -160,28 +175,23 @@ function Vault({ t, status, busy, face }: { t: T; status: Status; busy: boolean;
   const [value, setValue] = useState('')
   const { vault } = status
   return (
-    <Section title={t('vaultTitle')} promise={t('vaultPromise')}>
-      {vault.secrets.length === 0
-        ? <p style={muted}>{t('vaultEmpty')}</p>
-        : vault.secrets.map(secret => (
-          <div key={secret.name} style={{ ...row, justifyContent: 'space-between' }}>
-            <span style={row}><code>{secret.name}</code><Tag>{t(secret.origin === 'user' ? 'originUser' : 'originGenerated')}</Tag></span>
-            <Button size="sm" variant="ghost" disabled={busy || !vault.writable} onClick={() => { face.setSecret(secret.name, '') }}>{t('remove')}</Button>
-          </div>
-        ))}
+    <Section title={t('vaultTitle')}>
+      {vault.secrets.map(secret => (
+        <div key={secret.name} style={{ ...row, justifyContent: 'space-between' }}>
+          <span style={row}><code>{secret.name}</code><Tag>{t(secret.origin === 'user' ? 'originUser' : 'originGenerated')}</Tag></span>
+          <Button size="sm" variant="ghost" disabled={busy || !vault.writable} onClick={() => { face.setSecret(secret.name, '') }}>{t('remove')}</Button>
+        </div>
+      ))}
       {vault.writable
         ? (
-            <div style={column}>
-              <span style={row}>
-                <Input value={name} placeholder="DB_URL" aria-label={t('secretName')} disabled={busy}
-                  onChange={(event) => { setName(event.target.value.toUpperCase()) }} />
-                <Input type="password" autoComplete="off" value={value} aria-label={t('secretValue')} disabled={busy}
-                  onChange={(event) => { setValue(event.target.value) }} />
-                <Button size="sm" variant="outline" disabled={busy || name.length === 0 || value.length === 0}
-                  onClick={() => { face.setSecret(name, value); setValue('') }}>{t('add')}</Button>
-              </span>
-              <span style={muted}>{t('secretValueHint')} {t('vaultFileHint')}</span>
-            </div>
+            <span style={row}>
+              <Input value={name} placeholder="DB_URL" aria-label={t('secretName')} disabled={busy}
+                onChange={(event) => { setName(event.target.value.toUpperCase()) }} />
+              <Input type="password" autoComplete="off" value={value} aria-label={t('secretValue')} disabled={busy}
+                onChange={(event) => { setValue(event.target.value) }} />
+              <Button size="sm" variant="outline" disabled={busy || name.length === 0 || value.length === 0}
+                onClick={() => { face.setSecret(name, value); setValue('') }}>{t('add')}</Button>
+            </span>
           )
         : <p style={muted}>{t('vaultUnavailable')}</p>}
     </Section>
@@ -206,12 +216,9 @@ export function OffTheRecordPage(props: OffTheRecordPageProps) {
   const busy = state.busy !== undefined
   return (
     <div style={column}>
-      <p style={{ margin: 0 }}>{t('tagline')} <strong>{summary(t, status)}</strong></p>
       {!status.settingsAvailable && <p style={muted}>{t('settingsUnavailable')}</p>}
-      {state.notice !== undefined && (
-        <p role="status" style={muted}>
-          {state.notice.kind === 'error' ? t('actionFailed', { error: state.notice.message ?? '' }) : state.notice.kind === 'reset-id' ? t('resetIdDone') : t('saved')}
-        </p>
+      {state.notice?.kind === 'error' && (
+        <p role="alert" style={muted}>{t('actionFailed', { error: state.notice.message ?? '' })}</p>
       )}
       <Telemetry t={t} status={status} busy={busy} face={props} />
       <Search key={status.searxng.baseURL} t={t} status={status} busy={busy} face={props} />

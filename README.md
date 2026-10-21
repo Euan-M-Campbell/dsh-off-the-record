@@ -2,7 +2,7 @@
 
 > **dsh-off-the-record** keeps your sessions, secrets, and searches off DeepSeek's record.
 
-**Status: 0.5.0.** Disable telemetry, private search, the secrets vault, status checks, and the settings page are ready.
+**Status: 0.5.1.** Disable telemetry, private search, the secrets vault, status checks, and the settings page are ready.
 
 A bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) with three parts, each of which can be turned off on its own:
 
@@ -17,13 +17,13 @@ The harness still keeps your session log on your machine, and the model provider
 Tested with DSH `0.2.1-rc.2`. The bundle also loads on later releases; when a release changes a row it manages, that override is skipped with a startup warning (`patch: entry … not found`) until the bundle is updated.
 
 ```sh
-dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.5.0
+dsh plugin --profile <name> add github:Euan-M-Campbell/dsh-off-the-record#v0.5.1
 ```
 
 Desktop users install with the `dsh` command that Desktop sets up (**Manage dsh Command… → Install**), into the Desktop profile:
 
 ```sh
-dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.5.0
+dsh plugin --profile desktop add github:Euan-M-Campbell/dsh-off-the-record#v0.5.1
 ```
 
 Watch the first start after installing or upgrading either the harness or this bundle. If the harness cannot load the bundle at all, it prints `dsh: skipping profile bundle "dsh-off-the-record"` and starts with every channel back on.
@@ -45,7 +45,13 @@ In profiles without the Web app (the plain CLI, `headless`, `acp`, `sdk`), the h
 
 **Still sent.** The Desktop app checks `download.deepseek.com` for updates every 10 minutes, and polls a DeepSeek update-policy service that can require an update. Neither carries your sessions or your installation id, and a bundle cannot turn them off. Signing in to a DeepSeek account, and chatting with a DeepSeek model, contact DeepSeek because you asked them to.
 
-**Anonymous installation id.** The harness attaches a random id (`~/.dsh/.anonymous-user-id`) to DeepSeek requests. Delete that file to get a new one on the next start.
+**Anonymous installation id.** The harness attaches a random id (`~/.dsh/.anonymous-user-id`) to DeepSeek requests. By default this bundle replaces it every time the harness starts, so separate runs can't be linked by it. Your API key or account sign-in still identifies you to DeepSeek when you use a DeepSeek model. Turn this off on the settings page, or with:
+
+```yaml
+- id: otr-settings
+  config:
+    newIdEachStart: false
+```
 
 ### Re-enabling a channel
 
@@ -177,13 +183,13 @@ Every tool result, from any tool, has secret values replaced with `[secret:NAME]
 
 ## Settings page
 
-In the Web UI and the Desktop app, open **Settings → Plugins → dsh-off-the-record**. The page shows:
+In the Web UI and the Desktop app, open **Plugins → dsh-off-the-record**:
 
-- **Disable telemetry**: each channel's state, and when something turned one back on, the file responsible. Live channels (the session log on DeepSeek requests, desktop analytics) have a **Keep off** switch; the others name the line to remove from `cordis.patch.yml`. You can also reset the anonymous installation id here.
-- **Private search**: choose SearXNG or Brave, set the SearXNG instance, and store or remove the Brave key.
+- **Telemetry**: a switch for each channel, with a dot that is red while the channel sends nothing to DeepSeek and green while it does. Session Logs and Desktop Usage Analytics switch live; Session Feedback and Session Plugin Inventory can only change in `cordis.patch.yml` with a restart, so their switches are locked, and the page names the file when something turned one on. **Rotate Installation ID at Start-up** is on by default.
+- **Web Search Provider**: SearXNG or Brave, with the selected provider's instance address or API key, shown as **Set** or **Not set**.
 - **Secrets vault**: your secrets by name, with **Add** and **Remove**. A value you type goes to the harness once and is never shown again.
 
-The page is in English and Chinese. Every change is checked by the harness before it applies: an insecure SearXNG URL, a reserved secret name, or a short value is refused with the reason. Changes go to your profile's `cordis.patch.yml`, or to the credential store for keys and secrets.
+The page is in English and Chinese. The harness checks every change before applying it, and refuses an insecure SearXNG address, a reserved secret name, or a short value with the reason. Settings go to your profile's `cordis.patch.yml`; keys and secrets go to the credential store.
 
 ## Status checks
 

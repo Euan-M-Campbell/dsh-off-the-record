@@ -25,6 +25,7 @@ const STATUS: PageStatus = {
   search: { provider: 'searxng', fetchProvider: 'http', private: true },
   profile: 'web',
   telemetryEnvBackstop: false,
+  newIdEachStart: true,
   settingsAvailable: true,
   liveChannels: ['session-log-deepseek'],
   searxng: { baseURL: 'http://127.0.0.1:8888' },
@@ -37,8 +38,8 @@ const h = react.createElement
 const primitives = {
   Button: ({ children, onClick, disabled }: { children?: react.ReactNode; onClick?: () => void; disabled?: boolean }) => h('button', { onClick, disabled }, children),
   Input: (props: Record<string, unknown>) => h('input', props),
-  Switch: ({ checked, label, onChange }: { checked: boolean; label: string; onChange: (next: boolean) => void }) =>
-    h('input', { type: 'checkbox', 'aria-label': label, checked, onChange: () => { onChange(!checked) } }),
+  Switch: ({ checked, label, disabled, onChange }: { checked: boolean; label: string; disabled?: boolean; onChange: (next: boolean) => void }) =>
+    h('input', { type: 'checkbox', 'aria-label': label, checked, disabled, onChange: () => { onChange(!checked) } }),
   Tag: ({ children }: { children?: react.ReactNode }) => h('span', { className: 'tag' }, children),
   StateDot: ({ state }: { state: string }) => h('i', { 'data-state': state }),
 }
@@ -72,8 +73,8 @@ function translator(dict: Record<string, string>) {
 
 async function mountPage(overrides: Partial<PageStatus> = {}) {
   const calls: [string, unknown[]][] = []
-  const remote = Object.fromEntries(['setChannel', 'setSearchProvider', 'setSearxngUrl', 'setBraveKey', 'setSecret', 'resetAnonymousId'].map(method => [
-    method, (...args: unknown[]) => { calls.push([method, args]); return Promise.resolve({ ok: true, value: method === 'resetAnonymousId' ? { removed: true } : null }) },
+  const remote = Object.fromEntries(['setChannel', 'setSearchProvider', 'setSearxngUrl', 'setBraveKey', 'setSecret', 'setNewIdEachStart'].map(method => [
+    method, (...args: unknown[]) => { calls.push([method, args]); return Promise.resolve({ ok: true, value: null }) },
   ]))
   const offTheRecord = { ...remote, pageStatus: () => Promise.resolve({ ok: true, value: { ...STATUS, ...overrides } }) }
   const mounted: unknown[] = []
@@ -116,7 +117,7 @@ describe('client bundle', () => {
     const contribution = mounted[0] as { package: string; methods: Record<string, unknown> }
     expect(contribution.package).toBe('dsh-off-the-record')
     expect(Object.keys(contribution.methods).sort()).toEqual([
-      'offTheRecord/pageStatus', 'offTheRecord/resetAnonymousId', 'offTheRecord/setBraveKey', 'offTheRecord/setChannel',
+      'offTheRecord/pageStatus', 'offTheRecord/setBraveKey', 'offTheRecord/setChannel', 'offTheRecord/setNewIdEachStart',
       'offTheRecord/setSearchProvider', 'offTheRecord/setSearxngUrl', 'offTheRecord/setSecret',
     ])
     expect(registration.def).toMatchObject({ name: 'plugins.bundle.config', key: 'dsh-off-the-record', locale: 'settings.offTheRecord' })
@@ -131,12 +132,16 @@ describe('client bundle', () => {
   it('renders every section with the state, the layer responsible, and the secrets by name', async () => {
     const { render } = await mountPage()
     const html = render('page')
-    for (const text of [en.telemetryTitle, en.telemetryPromise, en.searchTitle, en.searchPromise, en.vaultTitle, en.vaultPromise]) expect(html).toContain(text.replaceAll('\'', '&#x27;').replaceAll('"', '&quot;'))
+    for (const text of [en.telemetryTitle, en.searchTitle, en.vaultTitle]) expect(html).toContain(text.replaceAll('\'', '&#x27;').replaceAll('"', '&quot;'))
+    // No summary or tagline line above the sections; the bundle header already says it.
+    expect(html).not.toContain(en.tagline.replaceAll('\'', '&#x27;'))
+    expect(html).not.toContain('telemetry channels off')
     expect(html).toContain('Turned on in /home/me/.dsh/profiles/web/cordis.patch.yml.')
     expect(html).toContain('DB_URL')
     expect(html).toContain('SESSION_KEY')
-    expect(html).toContain(en.braveKeySet)
+    // Only the selected provider's settings show: SearXNG's address, not Brave's key.
     expect(html).toContain('value="http://127.0.0.1:8888"')
+    expect(html).not.toContain(en.braveKey)
     expect(html).not.toContain('postgres')
   })
 
@@ -148,11 +153,62 @@ describe('client bundle', () => {
     expect(render('summary', zh)).toBe('已关闭 2/3 个遥测通道 · 搜索：searxng')
   })
 
+  it('shows the SearXNG address on one line, with its problem in place of Set when invalid', async () => {
+    const valid = (await mountPage()).render('page')
+    expect(valid).toContain(`>${en.set}<`)
+    const invalid = (await mountPage({ searxng: { baseURL: 'http://search.example.com', problem: 'plain http is allowed only for this machine or a private network; use https' } })).render('page')
+    expect(invalid).toContain('use https')
+    expect(invalid).not.toContain(`>${en.set}<`)
+    const unset = (await mountPage({ searxng: { baseURL: '', problem: 'no SearXNG instance is configured' } })).render('page')
+    expect(unset).toContain(`>${en.notSet}<`)
+  })
+
+  it('shows the Brave key, not the SearXNG address, when Brave is selected', async () => {
+    const { render } = await mountPage({ search: { provider: 'brave', fetchProvider: 'http', private: true } })
+    const html = render('page')
+    expect(html).toContain(en.braveKey)
+    expect(html).toContain(`>${en.set}<`)
+    expect(html).not.toContain(en.searxngUrl)
+  })
+
   it('explains an unavailable vault and a non-private search provider', async () => {
     const { render } = await mountPage({ vault: { available: true, writable: false, secrets: [] }, search: { provider: 'deepseek-search-api', fetchProvider: 'deepseek-fetch-api', private: false } })
     const html = render('page')
     expect(html).toContain(en.vaultUnavailable)
     expect(html).toContain('Search is set to &quot;deepseek-search-api&quot;, which is not private.')
+  })
+
+  it('gives every channel a switch: on means sending, and only live channels can be switched', async () => {
+    const { render } = await mountPage()
+    const html = render('page')
+    const switches = [...html.matchAll(/<input type="checkbox" aria-label="([^"]+)"[^>]*>/g)].map(match => ({ label: match[1], tag: match[0] }))
+    const state = (label: string) => switches.find(entry => entry.label === label)?.tag ?? ''
+    expect(switches.map(entry => entry.label)).toEqual([
+      en['channel.session-telemetry-otel'], en['channel.session-log-deepseek'], en['channel.plugin-package-inventory-deepseek'],
+      en['channel.product-analytics'], en.newIdEachStart,
+    ])
+    // A new installation id at every start: on by default, and switchable.
+    expect(state(en.newIdEachStart)).toContain('checked')
+    expect(state(en.newIdEachStart)).not.toContain('disabled')
+    // The session log is on (a profile override) and live: checked and enabled.
+    expect(state(en['channel.session-log-deepseek'])).toContain('checked')
+    expect(state(en['channel.session-log-deepseek'])).not.toContain('disabled')
+    // The feedback upload is off and needs a restart to change: unchecked and disabled.
+    expect(state(en['channel.session-telemetry-otel'])).not.toContain('checked')
+    expect(state(en['channel.session-telemetry-otel'])).toContain('disabled')
+    // Each toggle has a dot that follows its switch: green on (the session log and the rotating id), red off.
+    expect(html.match(/data-state="done"/g)?.length).toBe(2)
+    expect(html.match(/data-state="error"/g)?.length).toBe(3)
+    // The DeepSeek web providers stay off by design and are not shown.
+    expect(html).not.toContain('DeepSeek Search Provider')
+  })
+
+  it('turns a channel on when its switch is turned on, and off when turned off', async () => {
+    const { registration, face, calls } = await mountPage()
+    expect(registration).toBeDefined()
+    const act = face as unknown as { setChannel(id: string, off: boolean): void }
+    act.setChannel('session-log-deepseek', false)
+    await vi.waitFor(() => { expect(calls).toEqual([['setChannel', ['session-log-deepseek', false]]]) })
   })
 
   it('sends each action to the Host with its arguments', async () => {
@@ -164,13 +220,13 @@ describe('client bundle', () => {
     await vi.waitFor(() => { expect(calls).toHaveLength(2) })
     act.setSecret?.('NEW_KEY', 'new-value-123')
     await vi.waitFor(() => { expect(calls).toHaveLength(3) })
-    act.resetAnonymousId?.()
+    act.setNewIdEachStart?.(false)
     await vi.waitFor(() => { expect(calls).toHaveLength(4) })
     expect(calls).toEqual([
       ['setChannel', ['session-log-deepseek', true]],
       ['setSearchProvider', ['brave']],
       ['setSecret', ['NEW_KEY', 'new-value-123']],
-      ['resetAnonymousId', []],
+      ['setNewIdEachStart', [false]],
     ])
   })
 })
@@ -180,9 +236,4 @@ describe('page copy', () => {
     expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort())
   })
 
-  it('states the part promises verbatim', () => {
-    expect(en.telemetryPromise).toBe('Turns off the harness channels that send session logs, usage analytics, and plugin lists to DeepSeek. Conversations you send to a DeepSeek model still go to DeepSeek.')
-    expect(en.searchPromise).toBe('Web searches go to your SearXNG instance (or Brave, if you choose it), not DeepSeek. Page fetches go directly from your computer to the website.')
-    expect(en.vaultPromise).toBe('Secrets stay out of your conversation, logs, and model requests. On this machine the agent could still read the vault deliberately; run tools in an isolated box to prevent that.')
-  })
 })

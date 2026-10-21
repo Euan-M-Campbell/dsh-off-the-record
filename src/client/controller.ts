@@ -21,15 +21,15 @@ export interface OffTheRecordRemote {
   setSearxngUrl(url: string): Promise<CallResult<unknown>>
   setBraveKey(key: string): Promise<CallResult<unknown>>
   setSecret(name: string, value: string): Promise<CallResult<unknown>>
-  resetAnonymousId(): Promise<CallResult<{ readonly removed: boolean }>>
+  setNewIdEachStart(on: boolean): Promise<CallResult<unknown>>
 }
 
 /** What the page renders. */
 export interface PageState {
   status: PageStatus | undefined
   loadError: string | undefined
-  /** The last action's outcome: `saved`, an error message, or the anonymous id notice. */
-  notice: { readonly kind: 'saved' | 'error' | 'reset-id'; readonly message?: string } | undefined
+  /** The last action's outcome: `saved`, or an error message. */
+  notice: { readonly kind: 'saved' | 'error'; readonly message?: string } | undefined
   /** Name of the action in flight, if any. */
   busy: string | undefined
 }
@@ -43,7 +43,7 @@ export interface PageFace {
   setSearxngUrl(url: string): void
   setBraveKey(key: string): void
   setSecret(name: string, value: string): void
-  resetAnonymousId(): void
+  setNewIdEachStart(on: boolean): void
 }
 
 const message = (error: unknown): string =>
@@ -86,7 +86,7 @@ export class PageController {
       setSearxngUrl: (url) => { void this.run('searxng', () => this.remote.setSearxngUrl(url)) },
       setBraveKey: (key) => { void this.run('brave', () => this.remote.setBraveKey(key)) },
       setSecret: (name, value) => { void this.run('secret', () => this.remote.setSecret(name, value)) },
-      resetAnonymousId: () => { void this.run('anonymous-id', () => this.remote.resetAnonymousId(), 'reset-id') },
+      setNewIdEachStart: (on) => { void this.run('anonymous-id', () => this.remote.setNewIdEachStart(on)) },
     }
   }
 
@@ -97,13 +97,13 @@ export class PageController {
     this.timers.clear()
   }
 
-  private async run(name: string, call: () => Promise<CallResult<unknown>>, success: 'saved' | 'reset-id' = 'saved'): Promise<void> {
+  private async run(name: string, call: () => Promise<CallResult<unknown>>): Promise<void> {
     if (this.store.getSnapshot().busy !== undefined) return
     this.store.update((draft) => { draft.busy = name; draft.notice = undefined })
     let notice: PageState['notice']
     try {
       const result = await call()
-      notice = result.ok ? { kind: success } : { kind: 'error', message: result.error.message ?? 'unknown error' }
+      notice = result.ok ? { kind: 'saved' } : { kind: 'error', message: result.error.message ?? 'unknown error' }
     } catch (error: unknown) {
       notice = { kind: 'error', message: message(error) }
     }

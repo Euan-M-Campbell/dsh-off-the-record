@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -94,15 +94,16 @@ describe('Off the Record status check', () => {
 })
 
 describe('Off the Record service', () => {
-  async function mount(entries: readonly RowView[], patch = '') {
+  async function mount(entries: readonly RowView[], patch = '', config: { newIdEachStart?: boolean } = {}, seedId = false) {
     const home = mkdtempSync(join(tmpdir(), 'otr-home-'))
+    if (seedId) writeFileSync(join(home, '.anonymous-user-id'), 'old-id')
     const patchPath = join(home, 'profiles', 'web.patch.yml')
     mkdirSync(join(home, 'profiles'))
     writeFileSync(patchPath, patch)
     const ctx = new Context()
     ctx.provide('loader', { entries: () => entries.map(options => ({ options })) } as never)
     ctx.provide('profileContext', { name: 'web', patchPath, home, overlays: [], telemetryDisabledEnv: '1' } as never)
-    const fiber = await ctx.plugin(otr.default, { recheckDelayMs: 0 })
+    const fiber = await ctx.plugin(otr.default, { recheckDelayMs: 0, ...config })
     return { ctx, fiber, home }
   }
 
@@ -125,13 +126,24 @@ describe('Off the Record service', () => {
     await fiber.dispose()
   })
 
-  it('resets the anonymous installation id', async () => {
-    const { ctx, fiber, home } = await mount(healthy)
-    writeFileSync(join(home, '.anonymous-user-id'), 'old-id')
-    await expect(ctx.offTheRecord.resetAnonymousId()).resolves.toEqual({ removed: true, takesEffect: 'next-launch' })
-    expect(existsSync(join(home, '.anonymous-user-id'))).toBe(false)
-    await expect(ctx.offTheRecord.resetAnonymousId()).resolves.toEqual({ removed: false, takesEffect: 'next-launch' })
+  it('replaces the anonymous installation id at every start and stop by default', async () => {
+    const { ctx, fiber, home } = await mount(healthy, '', {}, true)
+    const idFile = join(home, '.anonymous-user-id')
+    // Removed at start, before any DeepSeek request reads it, so this run gets a new id.
+    expect(existsSync(idFile)).toBe(false)
+    expect((await ctx.offTheRecord.status()).newIdEachStart).toBe(true)
+    // An id created during the run is removed again at stop.
+    writeFileSync(idFile, 'run-id')
     await fiber.dispose()
+    expect(existsSync(idFile)).toBe(false)
+  })
+
+  it('keeps the anonymous installation id when the setting is off', async () => {
+    const { ctx, fiber, home } = await mount(healthy, '', { newIdEachStart: false }, true)
+    expect(readFileSync(join(home, '.anonymous-user-id'), 'utf8')).toBe('old-id')
+    expect((await ctx.offTheRecord.status()).newIdEachStart).toBe(false)
+    await fiber.dispose()
+    expect(readFileSync(join(home, '.anonymous-user-id'), 'utf8')).toBe('old-id')
   })
 
   it('removes the service on dispose', async () => {

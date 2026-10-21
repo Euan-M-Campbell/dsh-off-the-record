@@ -46,6 +46,7 @@ const status = (outcome: Outcome | undefined) => outcome?.value as {
   brave: { keyConfigured: boolean }
   vault: { writable: boolean; secrets: { name: string; origin: string }[] }
   liveChannels: string[]
+  newIdEachStart: boolean
 }
 
 describe('settings page Remote, through the Gateway', { timeout: 300_000 }, () => {
@@ -66,6 +67,7 @@ describe('settings page Remote, through the Gateway', { timeout: 300_000 }, () =
       ['setSearchProvider', { provider: 'brave' }],
       ['setBraveKey', { key: 'brave-test-key' }],
       ['setSecret', { name: 'PAGE_SECRET', value: 'page-secret-value' }],
+      ['setNewIdEachStart', { on: false }],
       ['pageStatus', {}, 1500],
     ])
     expect(outcomes.filter(outcome => !outcome.ok)).toEqual([])
@@ -75,6 +77,7 @@ describe('settings page Remote, through the Gateway', { timeout: 300_000 }, () =
     expect(page.channels.find(channel => channel.id === 'session-log-deepseek')?.state).toBe('on')
     expect(page.brave.keyConfigured).toBe(true)
     expect(page.vault.secrets).toEqual([{ name: 'PAGE_SECRET', origin: 'user' }])
+    expect(page.newIdEachStart).toBe(false)
     // Settings changes persist in the profile patch; secrets only in the credential store.
     expect(profilePatch).toContain('http://127.0.0.1:8888')
     expect(profilePatch).not.toContain('page-secret-value')

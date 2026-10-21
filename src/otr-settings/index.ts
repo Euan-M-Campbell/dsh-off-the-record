@@ -8,14 +8,16 @@
  * @module dsh-off-the-record
  */
 
-import { readFile, rm } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { checkComposition, describeReport, type CompositionReport, type LaterLayer, type RowView } from './check.ts'
-import { pageStatus, setBraveKey, setChannel, setSearchProvider, setSearxngUrl, setSecret, type PageStatus } from './page.ts'
+import { pageStatus, setBraveKey, setChannel, setNewIdEachStart, setSearchProvider, setSearxngUrl, setSecret, type PageStatus } from './page.ts'
 
 export { CHANNELS, checkComposition, describeReport, PRIVATE_SEARCH_PROVIDERS } from './check.ts'
 export type { ChannelState, ChannelStatus, CompositionReport, LaterLayer, RowView, SearchStatus } from './check.ts'
@@ -43,12 +45,23 @@ export interface OffTheRecordStatus extends CompositionReport {
   readonly profile?: string
   /** Whether DSH_TELEMETRY_DISABLED was set at launch, an independent backstop for the session upload. */
   readonly telemetryEnvBackstop: boolean
+  /** Whether the anonymous installation id is replaced at every start. */
+  readonly newIdEachStart: boolean
 }
 
 export interface Config {
   /** Delay before re-checking after a recomposition, in milliseconds. */
   recheckDelayMs: number
+  /**
+   * Delete the anonymous installation id at every start and stop, so each run
+   * of the harness sends a new one. The harness reads the id lazily, at the
+   * first DeepSeek request, so deleting it at start covers the same run.
+   */
+  newIdEachStart: Volatile<boolean>
 }
+
+/** The file the harness keeps its anonymous installation id in. */
+export const ANONYMOUS_ID_FILE = '.anonymous-user-id'
 
 const ROW_ID_PATTERN = (id: string): RegExp => new RegExp(`^[\\s-]*id:\\s*['"]?${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]?\\s*(#.*)?$`, 'm')
 
@@ -58,8 +71,9 @@ const ROW_ID_PATTERN = (id: string): RegExp => new RegExp(`^[\\s-]*id:\\s*['"]?$
 export default class OffTheRecord extends TypertRemoteService {
   static inject = ['loader']
 
-  static Config: z<Config> = z.object({
+  static Config = z.object({
     recheckDelayMs: z.number().step(1).min(0).max(60_000).default(250),
+    newIdEachStart: z.boolean().default(true).volatile(),
   })
 
   private latest: OffTheRecordStatus | undefined
@@ -67,6 +81,9 @@ export default class OffTheRecord extends TypertRemoteService {
 
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'offTheRecord')
+    // Synchronously, before any plugin's first DeepSeek request reads the id.
+    if (config.newIdEachStart.get()) this.removeAnonymousId()
+    ctx.effect(() => () => { if (this.config.newIdEachStart.get()) this.removeAnonymousId() })
     let timer: ReturnType<typeof setTimeout> | undefined
     const schedule = (): void => {
       if (timer !== undefined) clearTimeout(timer)
@@ -151,20 +168,22 @@ export default class OffTheRecord extends TypertRemoteService {
   }
 
   /**
-   * Delete the anonymous installation id. The harness mints a new one at the next launch.
-   * @returns whether a file was removed, and that the change applies at the next launch.
+   * Turn replacing the anonymous installation id at every start on or off.
+   * @param on - true to replace it at every start.
    */
   @Remote
-  async resetAnonymousId(): Promise<{ readonly removed: boolean; readonly takesEffect: 'next-launch' }> {
-    const home = this.profile()?.home
-    if (home === undefined) throw new Error('offTheRecord: the harness home is unknown in this process')
-    const path = join(home, '.anonymous-user-id')
-    let removed = true
-    await rm(path).catch((error: unknown) => {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') removed = false
-      else throw error
-    })
-    return { removed, takesEffect: 'next-launch' }
+  async setNewIdEachStart(on: boolean): Promise<void> {
+    await setNewIdEachStart(this.ctx, on)
+  }
+
+  /** Delete the id file; the harness creates a new id the next time it needs one. */
+  private removeAnonymousId(): void {
+    const home = this.profile()?.home ?? process.env.DSH_HOME ?? join(homedir(), '.dsh')
+    try {
+      rmSync(join(home, ANONYMOUS_ID_FILE), { force: true })
+    } catch (error: unknown) {
+      this.ctx.logger.warn('could not remove the anonymous installation id: %s', String(error))
+    }
   }
 
   /** Recompute the report and log it when it changed. */
@@ -183,6 +202,7 @@ export default class OffTheRecord extends TypertRemoteService {
       ...report,
       ...profile === undefined ? {} : { profile: profile.name },
       telemetryEnvBackstop: (profile?.telemetryDisabledEnv ?? '') !== '',
+      newIdEachStart: this.config.newIdEachStart.get(),
     }
     this.latest = status
     const { summary, warnings } = describeReport(report)

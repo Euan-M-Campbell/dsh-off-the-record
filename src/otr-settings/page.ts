@@ -24,6 +24,7 @@ const SEARXNG_ROW = 'otr-web-search-searxng'
 export interface PageStatus extends CompositionReport {
   readonly profile?: string
   readonly telemetryEnvBackstop: boolean
+  readonly newIdEachStart: boolean
   /** Whether the harness settings service is available to make live changes. */
   readonly settingsAvailable: boolean
   /** Channel ids the page can switch without a restart. */
@@ -42,7 +43,7 @@ export interface PageStatus extends CompositionReport {
  */
 export async function pageStatus(
   ctx: Context,
-  report: CompositionReport & { readonly profile?: string; readonly telemetryEnvBackstop: boolean },
+  report: CompositionReport & { readonly profile?: string; readonly telemetryEnvBackstop: boolean; readonly newIdEachStart: boolean },
   rows: readonly RowView[],
 ): Promise<PageStatus> {
   const searxngRow = rows.find(row => row.id === SEARXNG_ROW)
@@ -84,6 +85,16 @@ function settings(ctx: Context) {
 export async function setChannel(ctx: Context, id: string, off: boolean): Promise<void> {
   if (!LIVE_CHANNELS.includes(id)) throw new Error(`"${id}" cannot be changed from this page; edit your profile's cordis.patch.yml and restart`)
   await settings(ctx).mutate(id, [off ? { op: 'unset', path: ['enabled'] } : { op: 'set', path: ['enabled'], value: true }])
+}
+
+/**
+ * Turn replacing the anonymous installation id at every start on or off. On is
+ * this bundle's default, so turning it on removes the profile override.
+ * @param ctx - the Off the Record service context.
+ * @param on - true to replace the id at every start.
+ */
+export async function setNewIdEachStart(ctx: Context, on: boolean): Promise<void> {
+  await settings(ctx).mutate('otr-settings', [on ? { op: 'unset', path: ['newIdEachStart'] } : { op: 'set', path: ['newIdEachStart'], value: false }])
 }
 
 /**
