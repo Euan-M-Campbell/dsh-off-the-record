@@ -1,7 +1,7 @@
 {
   "name": "dsh-off-the-record",
   "description": "Keeps your DeepSeek Harness sessions, secrets, and searches off DeepSeek's record",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -23,6 +23,7 @@
   },
   "license": "MIT",
   "type": "module",
+  "icon": "./assets/icon.svg",
   "packageManager": "pnpm@11.28.5",
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
@@ -56,11 +57,22 @@
     "./client": {
       "default": "./lib/client.js"
     },
+    "./locale/*.json": "./locale/*.json",
+    "./web-search-searxng/locale/*.json": "./locale/web-search-searxng/*.json",
+    "./web-search-searxng/icon": "./assets/searxng.svg",
+    "./web-search-brave/locale/*.json": "./locale/web-search-brave/*.json",
+    "./web-search-brave/icon": "./assets/brave.svg",
+    "./vault-local/locale/*.json": "./locale/vault-local/*.json",
+    "./vault-local/icon": "./assets/vault.svg",
+    "./tool-vault/locale/*.json": "./locale/tool-vault/*.json",
+    "./tool-vault/icon": "./assets/tools.svg",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
-    "patches"
+    "patches",
+    "locale",
+    "assets"
   ],
   "dsh": {
     "bundle": {

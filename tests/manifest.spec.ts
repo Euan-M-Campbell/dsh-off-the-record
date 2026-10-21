@@ -40,12 +40,41 @@ describe('bundle manifest', () => {
         default: `./lib/${plugin}/index.js`,
       })
     }
-    const exported = Object.keys(manifest.exports).filter(key => key !== './package.json' && key !== './client')
+    // Display metadata (locale files, icons) and the browser half are exports, not plugins.
+    const exported = Object.keys(manifest.exports).filter(key => key !== './package.json' && key !== './client' && !key.includes('/locale/') && !key.endsWith('/icon'))
     expect(exported.toSorted()).toEqual(plugins.map(exportKey).toSorted())
   })
 
   it('ships no third-party runtime dependencies', () => {
     const dependencies = manifest.dependencies ?? {}
     expect(Object.keys(dependencies).filter(name => !name.startsWith('@deepseek-ai/'))).toEqual([])
+  })
+
+  it('gives the bundle and every component a title in English and Chinese, and an icon, through its exports', async () => {
+    const { createRequire } = await import('node:module')
+    const { existsSync } = await import('node:fs')
+    const require = createRequire(new URL('package.json', root))
+    const plugins = globSync('src/*/index.ts', { cwd: root }).map(file => basename(dirname(file)))
+      .filter(plugin => plugin !== 'client' && plugin !== 'otr-settings' && plugin !== 'vault')
+    for (const [locale, icon] of [['dsh-off-the-record/locale', undefined], ...plugins.map(plugin => [`dsh-off-the-record/${plugin}/locale`, `dsh-off-the-record/${plugin}/icon`])] as const) {
+      for (const lang of ['en', 'zh']) {
+        const file = require.resolve(`${locale}/${lang}.json`)
+        const { meta } = JSON.parse(readFileSync(file, 'utf8')) as { meta: { title?: unknown; description?: unknown } }
+        expect(typeof meta.title === 'string' && meta.title.length > 0, file).toBe(true)
+        expect(typeof meta.description === 'string' && meta.description.length > 0, file).toBe(true)
+      }
+      if (icon !== undefined) expect(existsSync(require.resolve(icon))).toBe(true)
+    }
+    const declared = (JSON.parse(readFileSync(new URL('package.json', root), 'utf8')) as { icon: string }).icon
+    const icons = [new URL(declared, root).pathname, ...plugins.map(plugin => require.resolve(`dsh-off-the-record/${plugin}/icon`))]
+    // Each component has its own icon, distinct from the bundle's and from each other.
+    expect(new Set(icons).size).toBe(icons.length)
+    for (const icon of icons) {
+      const svg = readFileSync(icon, 'utf8')
+      expect(svg.length, icon).toBeLessThan(256 * 1024)
+      expect(svg, icon).toMatch(/^<svg [^>]*viewBox="0 0 36 36"/)
+      // Self-contained: no external references.
+      expect(svg, icon).not.toMatch(/href="(?!#)|url\((?!#)/)
+    }
   })
 })

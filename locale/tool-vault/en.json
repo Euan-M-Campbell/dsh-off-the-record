@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Secrets Vault Tools",
+    "description": "Lets the model use secrets by name, and hides their values in every tool result."
+  }
+}

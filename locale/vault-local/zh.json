@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "密钥保险库存储",
+    "description": "将保险库中的密钥保存在 harness 凭据存储中。"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Secrets Vault Storage",
+    "description": "Keeps vault secrets in the harness credential store."
+  }
+}
