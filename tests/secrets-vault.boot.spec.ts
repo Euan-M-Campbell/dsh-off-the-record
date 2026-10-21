@@ -38,6 +38,14 @@ function writtenFiles(home: string): { path: string; text: string }[] {
   return out
 }
 
+/** The text of the tool result the model received. */
+function toolResultText(requests: readonly MockLlmRequestRecord[]): string {
+  const blocks = requests.flatMap(request => (request.body as { messages?: { content?: unknown }[] }).messages ?? [])
+    .flatMap(message => Array.isArray(message.content) ? message.content as { type?: string; content?: { text?: string }[] }[] : [])
+    .filter(block => block.type === 'tool_result')
+  return blocks.flatMap(block => block.content ?? []).map(part => part.text ?? '').join('\n')
+}
+
 function leaksIn(text: string): string[] {
   return leakForms.filter(form => text.includes(form))
 }
@@ -85,11 +93,13 @@ describe('secrets vault, booted', { timeout: 300_000 }, () => {
   it('passes the secret to the command and keeps every form of it out of model requests and the session log', async () => {
     const { requests, files } = await run(true, 'run_with_secrets', { description: 'Print the password', command: printEverywhere, secrets: ['DB_PASSWORD'] }, writePrinter)
     const sent = JSON.stringify(requests.map(request => request.body))
-    expect(sent).toContain('raw:[secret:DB_PASSWORD]')
-    expect(sent.match(/\[secret:DB_PASSWORD\]/g)?.length).toBeGreaterThanOrEqual(5)
     expect(leaksIn(sent)).toEqual([])
     expect(files.some(file => file.path.includes('session'))).toBe(true)
     expect(files.filter(file => leaksIn(file.text).length > 0).map(file => file.path)).toEqual([])
+    const result = toolResultText(requests)
+    expect(result).toContain('raw:[secret:DB_PASSWORD]')
+    // raw, base64, Basic-auth base64, JSON, URL-encoded, and base64url lines each carry the marker.
+    expect(result.match(/\[secret:DB_PASSWORD\]/g)?.length, result).toBeGreaterThanOrEqual(5)
   })
 
   it('redacts a secret that any other tool returns', async () => {
