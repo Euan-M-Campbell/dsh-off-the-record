@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { isCredentialKeySegment } from '@deepseek-ai/dsh-credentials'
 import { describe, expect, it } from 'vitest'
 import { nameFromRecordId, nameFromWorkspaceRecordId, recordId, secretName, secretNameProblem, workspaceDirectory, workspaceRecordId } from '../src/vault/index.ts'
@@ -78,8 +78,8 @@ describe('workspace scope keys', () => {
     const link = `${real}-link`
     symlinkSync(real, link)
     expect(workspaceDirectory(link)).toBe(realpath(real))
-    expect(workspaceDirectory(`${real}/../${real.split('/').at(-1) ?? ''}`)).toBe(realpath(real))
-    expect(workspaceDirectory('/no/such/dir/anywhere')).toBe('/no/such/dir/anywhere')
+    expect(workspaceDirectory(join(dirname(real), '..', basename(dirname(real)), basename(real)))).toBe(realpath(real))
+    expect(workspaceDirectory('/no/such/dir/anywhere')).toBe(resolve('/no/such/dir/anywhere'))
   })
 
   it('names a workspace record by directory hash and secret name, and reads the name back', () => {

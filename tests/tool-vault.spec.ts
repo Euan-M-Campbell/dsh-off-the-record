@@ -5,7 +5,7 @@ import WebRuntime from '@deepseek-ai/dsh-web'
 import { describe, expect, it, vi } from 'vitest'
 import * as brave from '../src/web-search-brave/index.ts'
 import * as toolVault from '../src/tool-vault/index.ts'
-import { secretName } from '../src/vault/index.ts'
+import { secretName, workspaceDirectory } from '../src/vault/index.ts'
 import LocalVault from '../src/vault-local/index.ts'
 import { MemoryCredentials } from './support/memory-credentials.ts'
 
@@ -137,7 +137,7 @@ describe('session workspace', () => {
   const session = (id: string, cwd?: string, parentSession?: string) => ({ header: { id, ...cwd === undefined ? {} : { cwd }, ...parentSession === undefined ? {} : { parentSession } } })
 
   it('is the directory the root session was created in', () => {
-    expect(sessionWorkspace(session('root', '/work/shop'), undefined)).toBe('/work/shop')
+    expect(sessionWorkspace(session('root', '/work/shop'), undefined)).toBe(workspaceDirectory('/work/shop'))
     expect(sessionWorkspace(session('root'), undefined)).toBeUndefined()
     expect(sessionWorkspace(undefined, undefined)).toBeUndefined()
   })
@@ -145,13 +145,13 @@ describe('session workspace', () => {
   it('follows live parents, so a subagent started elsewhere keeps the parent workspace', () => {
     const live = new Map([['root', session('root', '/work/shop')], ['child', session('child', '/work/blog', 'root')]])
     const sessions = { get: (id: never) => live.get(id) }
-    expect(sessionWorkspace(session('grandchild', '/work/other', 'child'), sessions)).toBe('/work/shop')
+    expect(sessionWorkspace(session('grandchild', '/work/other', 'child'), sessions)).toBe(workspaceDirectory('/work/shop'))
   })
 
   it('falls back to the session\'s own recorded directory when the parent is not loaded, and stops on a cycle', () => {
-    expect(sessionWorkspace(session('child', '/work/shop', 'gone'), { get: () => undefined })).toBe('/work/shop')
+    expect(sessionWorkspace(session('child', '/work/shop', 'gone'), { get: () => undefined })).toBe(workspaceDirectory('/work/shop'))
     const loop = new Map([['a', session('a', '/work/a', 'b')], ['b', session('b', '/work/b', 'a')]])
-    expect(sessionWorkspace(loop.get('a'), { get: (id: never) => loop.get(id) })).toMatch(/^\/work\/[ab]$/)
+    expect([workspaceDirectory('/work/a'), workspaceDirectory('/work/b')]).toContain(sessionWorkspace(loop.get('a'), { get: (id: never) => loop.get(id) }))
   })
 })
 
@@ -163,7 +163,7 @@ describe('vault tools in a workspace', () => {
   it('lists global and workspace secrets with their scope, and creates in the workspace by default', async () => {
     const { ctx } = await mount()
     await ctx.vault.set(secretName('DB_URL'), 'global-db-url')
-    await ctx.vault.set(secretName('SHOP_KEY'), 'shop-key-123', '/work/shop' as never)
+    await ctx.vault.set(secretName('SHOP_KEY'), 'shop-key-123', workspaceDirectory('/work/shop'))
     expect(text(await runIn(ctx, 'list_secrets', {}, '/work/shop'))).toBe('DB_URL (global, user)\nSHOP_KEY (workspace, user)')
     expect(text(await runIn(ctx, 'list_secrets', {}, '/work/blog'))).toBe('DB_URL (global, user)')
     expect(text(await runIn(ctx, 'create_secret', { name: 'BLOG_KEY' }, '/work/blog'))).toContain('Created BLOG_KEY (workspace,')
