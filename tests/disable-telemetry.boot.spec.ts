@@ -1,6 +1,8 @@
 // Boots the published dsh CLI's headless profile against the mock Messages
 // server and inspects the real requests the DeepSeek adapter sends.
 import { execFile } from 'node:child_process'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -20,8 +22,14 @@ const bundlePatches = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8
 const homes: string[] = []
 afterAll(() => { for (const home of homes) rmSync(home, { recursive: true, force: true }) })
 
+interface TaskOptions {
+  readonly task?: string
+  /** OTLP logs endpoint; defaults to a dead local port. */
+  readonly otlpUrl?: string
+}
+
 /** Run one headless task with optional --patch overlays; returns every request the mock received. */
-async function runTask(patches: readonly string[]): Promise<readonly MockLlmRequestRecord[]> {
+async function runTask(patches: readonly string[], options: TaskOptions = {}): Promise<readonly MockLlmRequestRecord[]> {
   const server = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['success'], repeatLast: true, successText: 'done' })
   const home = mkdtempSync(join(tmpdir(), 'otr-boot-'))
   homes.push(home)
@@ -29,7 +37,7 @@ async function runTask(patches: readonly string[]): Promise<readonly MockLlmRequ
     await promisify(execFile)(process.execPath, [
       dshBin, '--profile', 'headless',
       ...patches.flatMap(patch => ['--patch', patch]),
-      'Reply with the word done.',
+      options.task ?? 'Reply with the word done.',
     ], {
       cwd: home,
       timeout: 120_000,
@@ -40,12 +48,32 @@ async function runTask(patches: readonly string[]): Promise<readonly MockLlmRequ
         DEEPSEEK_BASE_URL: server.baseURL,
         DEEPSEEK_API_KEY: 'mock-key',
         // Never reach DeepSeek's collector, even in the control run.
-        DSH_TELEMETRY_OTLP_URL: 'http://127.0.0.1:9/v1/logs',
+        DSH_TELEMETRY_OTLP_URL: options.otlpUrl ?? 'http://127.0.0.1:9/v1/logs',
       },
     })
     return [...server.requests]
   } finally {
     await server.close()
+  }
+}
+
+const recordFeedbackPatch = join(root, 'tests/fixtures/record-feedback.patch.yml')
+
+/** Count OTLP export requests for one headless turn followed by recorded feedback. */
+async function feedbackUploads(patches: readonly string[]): Promise<number> {
+  let uploads = 0
+  const collector = createServer((request, response) => {
+    uploads += 1
+    request.resume()
+    request.on('end', () => { response.writeHead(200, { 'content-type': 'application/json' }).end('{}') })
+  })
+  await new Promise<void>(resolve => { collector.listen(0, '127.0.0.1', resolve) })
+  try {
+    const { port } = collector.address() as AddressInfo
+    await runTask([...patches, recordFeedbackPatch], { otlpUrl: `http://127.0.0.1:${port}/v1/logs` })
+    return uploads
+  } finally {
+    await new Promise<void>(resolve => { collector.close(() => { resolve() }) })
   }
 }
 
@@ -67,6 +95,14 @@ describe('disable telemetry, booted', { timeout: 300_000 }, () => {
     const sent = fields(requests)
     expect(sent).not.toContain('dsh_session_log')
     expect(sent).not.toContain('dsh_plugin_packages')
+  })
+
+  it('uploads the session on feedback without the bundle (control)', async () => {
+    expect(await feedbackUploads([])).toBeGreaterThan(0)
+  })
+
+  it('uploads nothing on feedback with the bundle', async () => {
+    expect(await feedbackUploads(bundlePatches)).toBe(0)
   })
 
   it('sends the session log again when a later layer re-enables it', async () => {

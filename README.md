@@ -2,7 +2,7 @@
 
 > **dsh-off-the-record** keeps your sessions, secrets, and searches off DeepSeek's record.
 
-**Status: pre-release.** Nothing is ready to install yet.
+**Status: 0.1.0.** Disable telemetry is ready; private search and the secrets vault are in progress.
 
 A bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) with three parts, each of which can be turned off on its own:
 
